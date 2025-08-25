@@ -279,6 +279,23 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
         return optionalFactoryAsSharedType;
     }
 
+    /**
+     * Get the appropriate C++ JSON value/comparison for an enum value
+     */
+    private getCppEnumJsonValue(value: string | number | boolean, _enumType: EnumType): Sourcelike[] {
+        const valueType = typeof value;
+        if (valueType === "number") {
+            // Return raw number for comparison/assignment
+            return [String(value)];
+        } else if (valueType === "boolean") {
+            // Return C++ boolean
+            return [String(value)];
+        } else {
+            // String - use string literal
+            return [this._stringType.createStringLiteral([stringEscape(String(value))])];
+        }
+    }
+
     // Returns the optional type most suitable for the given type.
     // Classes that don't require forward declarations can be stored
     // in std::optional ( or boost::optional )
@@ -1633,12 +1650,12 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
         const caseNames: Sourcelike[] = [];
         const enumValues = enumCaseValues(e, this.targetLanguage.name);
 
-        this.forEachEnumCase(e, "none", (name, jsonName) => {
+        this.forEachEnumCase(e, "none", (name, value) => {
             if (caseNames.length > 0) caseNames.push(", ");
             caseNames.push(name);
 
             if (enumValues !== undefined) {
-                const [enumValue] = getAccessorName(enumValues, jsonName);
+                const [enumValue] = getAccessorName(enumValues, String(value));
                 if (enumValue !== undefined) {
                     caseNames.push(" = ", enumValue.toString());
                 }
@@ -1891,6 +1908,12 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
     }
 
     private isLargeEnum(e: EnumType): boolean {
+        // Mixed enums cannot use the string-based hash map optimization
+        // because they contain non-string JSON values
+        if (e.isMixed) {
+            return false;
+        }
+
         // This is just an estimation. Someone might want to do some
         // benchmarks to find the optimum value here
         return e.cases.size > 15;
@@ -1925,7 +1948,7 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                             this.forEachEnumCase(
                                 e,
                                 "none",
-                                (name, jsonName) => {
+                                (name, value, _position) => {
                                     this.emitLine(
                                         "{",
                                         this._stringType.wrapEncodingChange(
@@ -1934,7 +1957,7 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                                             this.NarrowString.getType(),
                                             [
                                                 this._stringType.createStringLiteral(
-                                                    [stringEscape(jsonName)],
+                                                    [stringEscape(String(value))],
                                                 ),
                                             ],
                                         ),
@@ -1962,28 +1985,43 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                     );
                 } else {
                     let onFirst = true;
-                    this.forEachEnumCase(e, "none", (name, jsonName) => {
+                    this.forEachEnumCase(e, "none", (name, value) => {
                         const maybeElse = onFirst ? "" : "else ";
-                        this.emitLine(
-                            maybeElse,
-                            "if (j == ",
-                            this._stringType.wrapEncodingChange(
-                                [ourQualifier],
-                                this._stringType.getType(),
-                                this.NarrowString.getType(),
-                                [
-                                    this._stringType.createStringLiteral([
-                                        stringEscape(jsonName),
-                                    ]),
-                                ],
-                            ),
-                            ") x = ",
-                            ourQualifier,
-                            enumName,
-                            "::",
-                            name,
-                            ";",
-                        );
+                        const jsonValue = this.getCppEnumJsonValue(value, e);
+
+                        const valueType = typeof value;
+                        if (valueType === "number" || valueType === "boolean") {
+                            // For numbers and booleans, compare directly without string wrapping
+                            this.emitLine(
+                                maybeElse,
+                                "if (j == ",
+                                jsonValue,
+                                ") x = ",
+                                ourQualifier,
+                                enumName,
+                                "::",
+                                name,
+                                ";",
+                            );
+                        } else {
+                            // For strings, use the existing string wrapping logic
+                            this.emitLine(
+                                maybeElse,
+                                "if (j == ",
+                                this._stringType.wrapEncodingChange(
+                                    [ourQualifier],
+                                    this._stringType.getType(),
+                                    this.NarrowString.getType(),
+                                    jsonValue,
+                                ),
+                                ") x = ",
+                                ourQualifier,
+                                enumName,
+                                "::",
+                                name,
+                                ";",
+                            );
+                        }
                         onFirst = false;
                     });
                     this.emitLine(
@@ -2003,26 +2041,39 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
             false,
             () => {
                 this.emitBlock("switch (x)", false, () => {
-                    this.forEachEnumCase(e, "none", (name, jsonName) => {
-                        this.emitLine(
-                            "case ",
-                            ourQualifier,
-                            enumName,
-                            "::",
-                            name,
-                            ": j = ",
-                            this._stringType.wrapEncodingChange(
-                                [ourQualifier],
-                                this._stringType.getType(),
-                                this.NarrowString.getType(),
-                                [
-                                    this._stringType.createStringLiteral([
-                                        stringEscape(jsonName),
-                                    ]),
-                                ],
-                            ),
-                            "; break;",
-                        );
+                    this.forEachEnumCase(e, "none", (name, value) => {
+                        const jsonValue = this.getCppEnumJsonValue(value, e);
+
+                        if (e.valueType === "number" || e.valueType === "boolean") {
+                            // For numbers and booleans, assign directly
+                            this.emitLine(
+                                "case ",
+                                ourQualifier,
+                                enumName,
+                                "::",
+                                name,
+                                ": j = ",
+                                jsonValue,
+                                "; break;",
+                            );
+                        } else {
+                            // For strings, use the existing string wrapping logic
+                            this.emitLine(
+                                "case ",
+                                ourQualifier,
+                                enumName,
+                                "::",
+                                name,
+                                ": j = ",
+                                this._stringType.wrapEncodingChange(
+                                    [ourQualifier],
+                                    this._stringType.getType(),
+                                    this.NarrowString.getType(),
+                                    jsonValue,
+                                ),
+                                "; break;",
+                            );
+                        }
                     });
                     this.emitLine(
                         `default: throw std::runtime_error("Unexpected value in enumeration \\"`,

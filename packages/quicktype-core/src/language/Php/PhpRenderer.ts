@@ -1334,28 +1334,52 @@ export class PhpRenderer extends ConvenienceRenderer {
         // Empty
     }
 
+    private getPhpEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        if (enumType.valueType === "string") {
+            return ["'", stringEscape(String(value)), "'"];
+        } else if (enumType.valueType === "number") {
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            return value ? "true" : "false";
+        } else {
+            // Mixed enum fallback to string representation
+            return ["'", stringEscape(String(value)), "'"];
+        }
+    }
+
+    private getPhpEnumType(enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return "float"; // PHP uses float for all numbers in JSON
+        } else if (enumType.valueType === "boolean") {
+            return "bool";
+        } else {
+            return "string";
+        }
+    }
+
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitFileHeader(enumName, []);
         this.emitDescription(this.descriptionForType(e));
         const caseNames: Sourcelike[] = [];
         caseNames.push(";");
-        const enumSerdeType = "string";
+        const enumSerdeType = this.getPhpEnumType(e);
         this.emitBlock(["class ", enumName], () => {
-            this.forEachEnumCase(e, "none", (name, _jsonName) => {
+            this.forEachEnumCase(e, "none", (name, _value) => {
                 this.emitLine("public static ", enumName, " $", name, ";");
             });
 
             this.emitBlock("public static function init()", () => {
-                this.forEachEnumCase(e, "none", (name, jsonName) => {
+                this.forEachEnumCase(e, "none", (name, value) => {
+                    const phpValue = this.getPhpEnumValue(value, e);
                     this.emitLine(
                         enumName,
                         "::$",
                         name,
                         " = new ",
                         enumName,
-                        "('",
-                        jsonName,
-                        "');",
+                        "(",
+                        phpValue,
+                        ");",
                     );
                 });
             });
@@ -1390,16 +1414,16 @@ export class PhpRenderer extends ConvenienceRenderer {
                 () => {
                     this.emitLine("switch ($obj->enum) {");
                     this.indent(() => {
-                        this.forEachEnumCase(e, "none", (name, jsonName) => {
-                            // Todo String or Number
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            const phpValue = this.getPhpEnumValue(value, e);
                             this.emitLine(
                                 "case ",
                                 enumName,
                                 "::$",
                                 name,
-                                "->enum: return '",
-                                stringEscape(jsonName),
-                                "';",
+                                "->enum: return ",
+                                phpValue,
+                                ";",
                             );
                         });
                     });
@@ -1427,12 +1451,12 @@ export class PhpRenderer extends ConvenienceRenderer {
                 () => {
                     this.emitLine("switch ($obj) {");
                     this.indent(() => {
-                        this.forEachEnumCase(e, "none", (name, jsonName) => {
-                            // Todo String or Enum
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            const phpValue = this.getPhpEnumValue(value, e);
                             this.emitLine(
-                                "case '",
-                                stringEscape(jsonName),
-                                "': return ",
+                                "case ",
+                                phpValue,
+                                ": return ",
                                 enumName,
                                 "::$",
                                 name,
@@ -1461,7 +1485,7 @@ export class PhpRenderer extends ConvenienceRenderer {
                 ],
                 () => {
                     const lines: Sourcelike[] = [];
-                    this.forEachEnumCase(e, "none", (name) => {
+                    this.forEachEnumCase(e, "none", (name, _value) => {
                         lines.push([enumName, "::$", name]);
                     });
                     this.emitLine("return ", lines[0], ";");

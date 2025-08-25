@@ -35,9 +35,14 @@ export function enumCaseValues(
     const enumValues = enumValuesTypeAttributeKind.tryGetInAttributes(
         e.getAttributes(),
     );
-    if (enumValues === undefined)
-        return mapMap(e.cases.entries(), (_) => undefined);
-    return mapMap(e.cases.entries(), (c) => lookupKey(enumValues, c, language));
+    
+    if (enumValues === undefined) {
+        return mapMap(e.caseKeys.entries(), (_) => undefined);
+    }
+    
+    return mapMap(e.caseKeys.entries(), (caseKey) => 
+        lookupKey(enumValues, caseKey, language)
+    );
 }
 
 export function enumValuesAttributeProducer(

@@ -3,7 +3,7 @@ import { iterableFirst, mapFirst } from "collection-utils";
 import { addDescriptionToSchema } from "../../attributes/Description";
 import { ConvenienceRenderer } from "../../ConvenienceRenderer";
 import type { Name, Namer } from "../../Naming";
-import { defined, panic } from "../../support/Support";
+import { defined, panic, type StringMap } from "../../support/Support";
 import {
     type EnumType,
     type ObjectType,
@@ -68,7 +68,7 @@ export class JSONSchemaRenderer extends ConvenienceRenderer {
     }
 
     private schemaForType(t: Type): Schema {
-        const schema = matchTypeExhaustive(
+        const schema: StringMap = matchTypeExhaustive(
             t,
             (_noneType) => {
                 return panic("none type should have been replaced");
@@ -169,8 +169,20 @@ export class JSONSchemaRenderer extends ConvenienceRenderer {
         return oneOf;
     }
 
+    private getJsonSchemaEnumType(enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return "number";
+        }
+        if (enumType.valueType === "boolean") {
+            return "boolean";
+        }
+        return "string";
+        
+    }
+
     private definitionForEnum(e: EnumType, title: string): Schema {
-        const schema = { type: "string", enum: Array.from(e.cases), title };
+        const enumType = this.getJsonSchemaEnumType(e);
+        const schema = { type: enumType, enum: Array.from(e.cases), title };
         this.addAttributesToSchema(e, schema);
         return schema;
     }

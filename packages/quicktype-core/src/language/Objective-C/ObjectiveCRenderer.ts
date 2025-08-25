@@ -995,12 +995,30 @@ export class ObjectiveCRenderer extends ConvenienceRenderer {
         this.emitDescription(this.descriptionForType(enumType));
 
         this.emitLine("@interface ", enumName, " : NSObject");
-        this.emitLine("@property (nonatomic, readonly, copy) NSString *value;");
-        this.emitLine("+ (instancetype _Nullable)withValue:(NSString *)value;");
-        this.forEachEnumCase(enumType, "none", (name, _) => {
+        this.emitLine("@property (nonatomic, readonly, copy) id value;");
+        this.emitLine("+ (instancetype _Nullable)withValue:(id)value;");
+        this.forEachEnumCase(enumType, "none", (name, _value) => {
             this.emitLine("+ (", enumName, " *)", name, ";");
         });
         this.emitLine("@end");
+    }
+
+    private getObjcEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        if (enumType.valueType === "string") {
+            return ['@"', stringEscape(String(value)), '"'];
+        } else if (enumType.valueType === "number") {
+            return ['@', String(value)];
+        } else if (enumType.valueType === "boolean") {
+            return value === true ? '@YES' : '@NO';
+        } else {
+            // Mixed enum fallback to string representation
+            return ['@"', stringEscape(String(value)), '"'];
+        }
+    }
+
+    private getObjcEnumValueAsString(value: string | number | boolean): string {
+        // For dictionary keys, everything must be a string
+        return stringEscape(String(value));
     }
 
     private emitPseudoEnumImplementation(
@@ -1010,6 +1028,7 @@ export class ObjectiveCRenderer extends ConvenienceRenderer {
         this.emitLine("@implementation ", enumName);
 
         const instances = [enumName, ".", staticEnumValuesIdentifier];
+        
         this.emitMethod(
             [
                 "+ (NSDictionary<NSString *, ",
@@ -1035,14 +1054,15 @@ export class ObjectiveCRenderer extends ConvenienceRenderer {
                     " : @{",
                 );
                 this.indent(() => {
-                    this.forEachEnumCase(enumType, "none", (_, jsonValue) => {
-                        const value = ['@"', stringEscape(jsonValue), '"'];
+                    this.forEachEnumCase(enumType, "none", (_, enumValue) => {
+                        const keyValue = ['@"', this.getObjcEnumValueAsString(enumValue), '"'];
+                        const storedValue = this.getObjcEnumValue(enumValue, enumType);
                         this.emitLine(
-                            value,
+                            keyValue,
                             ": [[",
                             enumName,
                             " alloc] initWithValue:",
-                            value,
+                            storedValue,
                             "],",
                         );
                     });
@@ -1052,7 +1072,8 @@ export class ObjectiveCRenderer extends ConvenienceRenderer {
         );
 
         this.ensureBlankLine();
-        this.forEachEnumCase(enumType, "none", (name, jsonValue) => {
+        this.forEachEnumCase(enumType, "none", (name, value) => {
+            const keyValue = ['@"', this.getObjcEnumValueAsString(value), '"'];
             this.emitLine(
                 "+ (",
                 enumName,
@@ -1060,21 +1081,21 @@ export class ObjectiveCRenderer extends ConvenienceRenderer {
                 name,
                 " { return ",
                 instances,
-                '[@"',
-                stringEscape(jsonValue),
-                '"]; }',
+                "[",
+                keyValue,
+                "]; }",
             );
         });
         this.ensureBlankLine();
 
         this.emitMethod(
-            "+ (instancetype _Nullable)withValue:(NSString *)value",
-            () => this.emitLine("return ", instances, "[value];"),
+            "+ (instancetype _Nullable)withValue:(id)value",
+            () => this.emitLine("return ", instances, "[[value description]];"),
         );
 
         this.ensureBlankLine();
         this.emitMethod(
-            "- (instancetype)initWithValue:(NSString *)value",
+            "- (instancetype)initWithValue:(id)value",
             () => {
                 this.emitLine("if (self = [super init]) _value = value;");
                 this.emitLine("return self;");

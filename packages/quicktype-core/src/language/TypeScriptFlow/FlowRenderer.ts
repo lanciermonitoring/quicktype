@@ -19,9 +19,13 @@ export class FlowRenderer extends TypeScriptFlowBaseRenderer {
     protected emitEnum(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
         const lines: string[][] = [];
-        this.forEachEnumCase(e, "none", (_, jsonName) => {
+        this.forEachEnumCase(e, "none", (_, value) => {
             const maybeOr = lines.length === 0 ? "  " : "| ";
-            lines.push([maybeOr, '"', utf16StringEscape(jsonName), '"']);
+            // Flow enums are union types, so we use the actual value
+            const literal = typeof value === "string" 
+                ? `"${utf16StringEscape(value)}"` 
+                : String(value);
+            lines.push([maybeOr, literal]);
         });
         defined(lines[lines.length - 1]).push(";");
 

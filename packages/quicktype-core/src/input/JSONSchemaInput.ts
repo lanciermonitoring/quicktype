@@ -55,9 +55,7 @@ import {
     parseJSON,
 } from "../support/Support";
 import {
-    type PrimitiveTypeKind,
     type TransformedStringTypeKind,
-    isNumberTypeKind,
     transformedStringTypeTargetTypeKindsMap,
 } from "../Type";
 import type { TypeBuilder } from "../Type/TypeBuilder";
@@ -1222,6 +1220,14 @@ async function addTypesInSchema(
         const needStringEnum =
             includedTypes.has("string") &&
             enumArray?.find((x) => typeof x === "string") !== undefined;
+        const needNumberEnum =
+            (includedTypes.has("number") || includedTypes.has("integer")) &&
+            enumArray?.find((x) => typeof x === "number") !== undefined;
+
+        const needBooleanEnum =
+            includedTypes.has("boolean") &&
+            enumArray?.find((x) => typeof x === "boolean") !== undefined;
+
         const needUnion =
             typeSet !== undefined ||
             schema.properties !== undefined ||
@@ -1240,18 +1246,106 @@ async function addTypesInSchema(
                 ({ forNumber }) => forNumber,
             );
 
-            for (const [name, kind] of [
-                ["null", "null"],
-                ["number", "double"],
-                ["integer", "integer"],
-                ["boolean", "bool"],
-            ] as Array<[JSONSchemaType, PrimitiveTypeKind]>) {
-                if (!includedTypes.has(name)) continue;
+            // Detect if we have a mixed enum (different primitive types)
+            const enumTypes = new Set<string>();
+            if (enumArray) {
+                for (const item of enumArray) {
+                    enumTypes.add(typeof item);
+                }
+            }
+            const isMixedEnum = enumTypes.size > 1;
 
-                const attributes = isNumberTypeKind(kind)
-                    ? numberAttributes
-                    : undefined;
-                unionTypes.push(typeBuilder.getPrimitiveType(kind, attributes));
+            // For mixed enums, create separate typed enums for each value type
+            if (isMixedEnum) {
+                // Create separate enums for each type in the mixed enum
+                if (includedTypes.has("null")) {
+                    unionTypes.push(typeBuilder.getPrimitiveType("null"));
+                }
+
+                // Number enum
+                if ((includedTypes.has("number") || includedTypes.has("integer")) && 
+                    enumArray?.some((x) => typeof x === "number")) {
+                    const numberCases = enumArray.filter((x) => typeof x === "number");
+                    const isIntegerEnum = numberCases.every((x: number) => Number.isInteger(x));
+                    const hasIntegerType = includedTypes.has("integer");
+                    const hasNumberType = includedTypes.has("number");
+
+                    if (isIntegerEnum && hasIntegerType) {
+                        unionTypes.push(typeBuilder.getEnumType(
+                            combineTypeAttributes("union", inferredAttributes, numberAttributes),
+                            new Set(numberCases)
+                        ));
+                    } else if (hasNumberType) {
+                        unionTypes.push(typeBuilder.getEnumType(
+                            combineTypeAttributes("union", inferredAttributes, numberAttributes),
+                            new Set(numberCases)
+                        ));
+                    }
+                }
+
+                // Boolean enum
+                if (includedTypes.has("boolean") && enumArray?.some((x) => typeof x === "boolean")) {
+                    const booleanCases = enumArray.filter((x) => typeof x === "boolean");
+                    unionTypes.push(typeBuilder.getEnumType(
+                        inferredAttributes,
+                        new Set(booleanCases)
+                    ));
+                }
+
+                // String enum will be handled in the string section below
+            } else {
+                // For pure type enums, use our enhanced enum logic
+                if (includedTypes.has("null")) {
+                    unionTypes.push(typeBuilder.getPrimitiveType("null"));
+                }
+
+                // Handle numeric types - check for enums first
+                if (needNumberEnum || (isConst && typeof schema.const === "number")) {
+                    const cases = isConst && typeof schema.const === "number"
+                        ? [schema.const]
+                        : (enumArray?.filter((x) => typeof x === "number") ?? []);
+
+                    // Determine if it's integer or double enum
+                    const isIntegerEnum = cases.every((x: number) => Number.isInteger(x));
+                    const hasIntegerType = includedTypes.has("integer");
+                    const hasNumberType = includedTypes.has("number");
+
+                    if (isIntegerEnum && hasIntegerType) {
+                        // Integer enum
+                        unionTypes.push(typeBuilder.getEnumType(
+                            combineTypeAttributes("union", inferredAttributes, numberAttributes),
+                            new Set(cases)
+                        ));
+                    } else if (hasNumberType) {
+                        // Number/double enum
+                        unionTypes.push(typeBuilder.getEnumType(
+                            combineTypeAttributes("union", inferredAttributes, numberAttributes),
+                            new Set(cases)
+                        ));
+                    }
+                } else {
+                    // Regular primitive numbers (no enum)
+                    if (includedTypes.has("integer")) {
+                        unionTypes.push(typeBuilder.getPrimitiveType("integer", numberAttributes));
+                    }
+                    if (includedTypes.has("number")) {
+                        unionTypes.push(typeBuilder.getPrimitiveType("double", numberAttributes));
+                    }
+                }
+
+                // Handle boolean enums
+                if (needBooleanEnum || (isConst && typeof schema.const === "boolean")) {
+                    const cases = isConst && typeof schema.const === "boolean"
+                        ? [schema.const]
+                        : (enumArray?.filter((x) => typeof x === "boolean") ?? []);
+
+                    unionTypes.push(typeBuilder.getEnumType(
+                        inferredAttributes,
+                        new Set(cases)
+                    ));
+                } else if (includedTypes.has("boolean")) {
+                    unionTypes.push(typeBuilder.getPrimitiveType("bool"));
+                }
             }
 
             const stringAttributes = combineTypeAttributes(
@@ -1260,14 +1354,15 @@ async function addTypesInSchema(
                 combineProducedAttributes(({ forString }) => forString),
             );
 
-            if (needStringEnum || isConst) {
-                const cases = isConst
+            // The string enum handling stays the same but needs updating for const handling:
+            if (needStringEnum || (isConst && typeof schema.const === "string")) {
+                const cases = isConst && typeof schema.const === "string"
                     ? [schema.const]
                     : (enumArray?.filter((x) => typeof x === "string") ?? []);
                 unionTypes.push(
-                    typeBuilder.getStringType(
-                        stringAttributes,
-                        StringTypes.fromCases(cases),
+                    typeBuilder.getEnumType(
+                        inferredAttributes,
+                        new Set(cases),
                     ),
                 );
             } else if (includedTypes.has("string")) {

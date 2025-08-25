@@ -286,19 +286,52 @@ export class GoRenderer extends ConvenienceRenderer {
         this.startFile(enumName);
         this.emitPackageDefinitons(false);
         this.emitDescription(this.descriptionForType(e));
-        this.emitLine("type ", enumName, " string");
+        
+        // Choose appropriate Go type based on enum value type
+        const goType = this.getGoTypeForEnum(e);
+        this.emitLine("type ", enumName, " ", goType);
         this.ensureBlankLine();
         this.emitLine("const (");
         const columns: Sourcelike[][] = [];
-        this.forEachEnumCase(e, "none", (name, jsonName) => {
+        this.forEachEnumCase(e, "none", (name, value) => {
+            const goValue = this.formatGoEnumValue(value, goType);
             columns.push([
                 [name, " "],
-                [enumName, ' = "', stringEscape(jsonName), '"'],
+                [enumName, " = ", goValue],
             ]);
         });
         this.indent(() => this.emitTable(columns));
         this.emitLine(")");
         this.endFile();
+    }
+
+    private getGoTypeForEnum(e: EnumType): string {
+        switch (e.valueType) {
+            case "number":
+                // Check if all numbers are integers
+                const allIntegers = Array.from(e.cases).every(v => 
+                    typeof v === "number" && Number.isInteger(v)
+                );
+                return allIntegers ? "int64" : "float64";
+            case "boolean":
+                return "bool";
+            case "string":
+            case "mixed":
+            default:
+                return "string";
+        }
+    }
+
+    private formatGoEnumValue(value: string | number | boolean, goType: string): string {
+        if (goType === "string") {
+            return `"${stringEscape(String(value))}"`;
+        } else if (goType === "bool") {
+            return String(value);
+        } else if (goType === "int64" || goType === "float64") {
+            return String(value);
+        }
+        // Fallback to string
+        return `"${stringEscape(String(value))}"`;
     }
 
     private emitUnion(u: UnionType, unionName: Name): void {

@@ -192,7 +192,7 @@ export class RubyRenderer extends ConvenienceRenderer {
             (enumType) => {
                 let name: Name | undefined;
                 // FIXME: This is a terrible way to get the first enum case name.
-                this.forEachEnumCase(enumType, "none", (theName) => {
+                this.forEachEnumCase(enumType, "none", (theName, _value) => {
                     if (name === undefined) {
                         name = theName;
                     }
@@ -562,12 +562,26 @@ export class RubyRenderer extends ConvenienceRenderer {
         });
     }
 
+    private getRubyEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        if (enumType.valueType === "string") {
+            return [`"${stringEscape(String(value))}"`];
+        } else if (enumType.valueType === "number") {
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            return String(value);
+        } else {
+            // Mixed enum fallback to string representation
+            return [`"${stringEscape(String(value))}"`];
+        }
+    }
+
     private emitEnum(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
         this.emitBlock(["module ", enumName], () => {
             const table: Sourcelike[][] = [];
-            this.forEachEnumCase(e, "none", (name, json) => {
-                table.push([[name], [` = "${stringEscape(json)}"`]]);
+            this.forEachEnumCase(e, "none", (name, value) => {
+                const rubyValue = this.getRubyEnumValue(value, e);
+                table.push([[name], [" = ", rubyValue]]);
             });
             this.emitTable(table);
         });
@@ -766,10 +780,14 @@ export class RubyRenderer extends ConvenienceRenderer {
 
             this.forEachEnum("none", (enumType, enumName) => {
                 const cases: Sourcelike[][] = [];
-                this.forEachEnumCase(enumType, "none", (_name, json) => {
+                const typePrefix = enumType.valueType === "number" ? "Integer" :
+                                 enumType.valueType === "boolean" ? "Bool" : "String";
+                
+                this.forEachEnumCase(enumType, "none", (_name, value) => {
+                    const rubyValue = this.getRubyEnumValue(value, enumType);
                     cases.push([
                         cases.length === 0 ? "" : ", ",
-                        `"${stringEscape(json)}"`,
+                        rubyValue,
                     ]);
                 });
                 declarations.push([
@@ -777,7 +795,8 @@ export class RubyRenderer extends ConvenienceRenderer {
                     [
                         " = ",
                         this._options.strictness,
-                        "String.enum(",
+                        typePrefix,
+                        ".enum(",
                         ...cases,
                         ")",
                     ],

@@ -153,13 +153,27 @@ export class PikeRenderer extends ConvenienceRenderer {
         this.emitDecodingFunction(className, c);
     }
 
+    private getPikeEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        if (enumType.valueType === "string") {
+            return ['"', stringEscape(String(value)), '"'];
+        } else if (enumType.valueType === "number") {
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            return String(value);
+        } else {
+            // Mixed enum fallback to string representation
+            return ['"', stringEscape(String(value)), '"'];
+        }
+    }
+
     protected emitEnum(e: EnumType, enumName: Name): void {
         this.emitBlock([e.kind, " ", enumName], () => {
             const table: Sourcelike[][] = [];
-            this.forEachEnumCase(e, "none", (name, jsonName) => {
+            this.forEachEnumCase(e, "none", (name, value) => {
+                const pikeValue = this.getPikeEnumValue(value, e);
                 table.push([
-                    [name, ' = "', stringEscape(jsonName), '", '],
-                    ['// json: "', jsonName, '"'],
+                    [name, ' = ', pikeValue, ', '],
+                    ['// json: "', String(value), '"'],
                 ]);
             });
             this.emitTable(table);

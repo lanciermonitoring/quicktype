@@ -211,10 +211,14 @@ export class JavaScriptPropTypesRenderer extends ConvenienceRenderer {
             this.forEachEnumCase(
                 enumType,
                 "none",
-                (name: Name, _jsonName, _position) => {
-                    options.push("'");
-                    options.push(name);
-                    options.push("'");
+                (_name: Name, value, _position) => {
+                    if (typeof value === "string") {
+                        options.push("'");
+                        options.push(utf16StringEscape(value));
+                        options.push("'");
+                    } else {
+                        options.push(String(value));
+                    }
                     options.push(", ");
                 },
             );

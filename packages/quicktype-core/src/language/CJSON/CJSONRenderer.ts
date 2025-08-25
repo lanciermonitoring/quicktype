@@ -408,11 +408,11 @@ export class CJSONRenderer extends ConvenienceRenderer {
                 const combinedName = allUpperWordStyle(
                     this.sourcelikeToString(enumName),
                 );
-                this.forEachEnumCase(enumType, "none", (name, jsonName) => {
+                this.forEachEnumCase(enumType, "none", (name, value) => {
                     if (enumValues !== undefined) {
                         const [enumValue] = getAccessorName(
                             enumValues,
-                            jsonName,
+                            String(value),
                         );
                         if (enumValue !== undefined) {
                             this.emitLine(
@@ -489,12 +489,13 @@ export class CJSONRenderer extends ConvenienceRenderer {
                     const combinedName = allUpperWordStyle(
                         this.sourcelikeToString(enumName),
                     );
-                    this.forEachEnumCase(enumType, "none", (name, jsonName) => {
+                    this.forEachEnumCase(enumType, "none", (name, value) => {
+                        const comparison = this.getCJSONEnumComparison(value, enumType);
                         this.emitLine(
                             onFirst ? "" : "else ",
-                            'if (!strcmp(cJSON_GetStringValue(j), "',
-                            jsonName,
-                            '")) x = ',
+                            'if (',
+                            comparison.condition,
+                            ') x = ',
                             combinedName,
                             "_",
                             name,
@@ -523,15 +524,16 @@ export class CJSONRenderer extends ConvenienceRenderer {
                     const combinedName = allUpperWordStyle(
                         this.sourcelikeToString(enumName),
                     );
-                    this.forEachEnumCase(enumType, "none", (name, jsonName) => {
+                    this.forEachEnumCase(enumType, "none", (name, value) => {
+                        const creation = this.getCJSONEnumCreation(value, enumType);
                         this.emitLine(
                             "case ",
                             combinedName,
                             "_",
                             name,
-                            ': j = cJSON_CreateString("',
-                            jsonName,
-                            '"); break;',
+                            ': j = ',
+                            creation,
+                            '; break;',
                         );
                     });
                 });
@@ -539,6 +541,43 @@ export class CJSONRenderer extends ConvenienceRenderer {
             },
         );
         this.ensureBlankLine();
+    }
+
+    /**
+     * Get the appropriate cJSON comparison for an enum value
+     */
+    private getCJSONEnumComparison(value: string | number | boolean, enumType: EnumType): { condition: string; getValue: string } {
+        if (enumType.valueType === "number") {
+            return {
+                condition: `cJSON_GetNumberValue(j) == ${value}`,
+                getValue: "cJSON_GetNumberValue"
+            };
+        } else if (enumType.valueType === "boolean") {
+            return {
+                condition: value === true ? "cJSON_IsTrue(j)" : "cJSON_IsFalse(j)",
+                getValue: "cJSON_IsTrue"  // Not used for boolean but needed for interface
+            };
+        } else {
+            // string or mixed - treat as string
+            return {
+                condition: `!strcmp(cJSON_GetStringValue(j), "${String(value)}")`,
+                getValue: "cJSON_GetStringValue"
+            };
+        }
+    }
+
+    /**
+     * Get the appropriate cJSON creation function for an enum value
+     */
+    private getCJSONEnumCreation(value: string | number | boolean, enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return `cJSON_CreateNumber(${value})`;
+        } else if (enumType.valueType === "boolean") {
+            return `cJSON_CreateBool(${value})`;
+        } else {
+            // string or mixed - treat as string
+            return `cJSON_CreateString("${String(value)}")`;
+        }
     }
 
     /**

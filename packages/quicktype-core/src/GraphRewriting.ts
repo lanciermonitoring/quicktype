@@ -162,7 +162,7 @@ export class TypeReconstituter<TBuilder extends BaseGraphRewriteBuilder> {
         );
     }
 
-    public getEnumType(cases: ReadonlySet<string>): void {
+    public getEnumType(cases: ReadonlySet<string | number | boolean>): void {
         this.register(
             this.builderForNewType().getEnumType(
                 this._typeAttributes,

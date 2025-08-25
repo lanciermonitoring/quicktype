@@ -16,7 +16,7 @@ import type { RenderContext } from "../../Renderer";
 import type { OptionValues } from "../../RendererOptions";
 import { type Sourcelike, maybeAnnotated } from "../../Source";
 import { acronymStyle } from "../../support/Acronyms";
-import { capitalize } from "../../support/Strings";
+import { capitalize, stringEscape } from "../../support/Strings";
 import { assert, assertNever, defined } from "../../support/Support";
 import type { TargetLanguage } from "../../TargetLanguage";
 import {
@@ -42,7 +42,7 @@ import {
     JavaLegacyDateTimeProvider,
 } from "./DateTimeProvider";
 import type { javaOptions } from "./language";
-import { javaNameStyle, stringEscape } from "./utils";
+import { javaNameStyle } from "./utils";
 
 export class JavaRenderer extends ConvenienceRenderer {
     private _currentFilename: string | undefined;
@@ -646,7 +646,7 @@ export class JavaRenderer extends ConvenienceRenderer {
         this.emitFileHeader(enumName, this.importsForType(e));
         this.emitDescription(this.descriptionForType(e));
         const caseNames: Sourcelike[] = [];
-        this.forEachEnumCase(e, "none", (name) => {
+        this.forEachEnumCase(e, "none", (name, _value) => {
             if (caseNames.length > 0) caseNames.push(", ");
             caseNames.push(name);
         });
@@ -656,16 +656,18 @@ export class JavaRenderer extends ConvenienceRenderer {
             this.ensureBlankLine();
 
             this.emitEnumSerializationAttributes(e);
-            this.emitBlock("public String toValue()", () => {
+            const javaReturnType = this.getJavaReturnTypeForEnum(e);
+            this.emitBlock([`public ${javaReturnType} toValue()`], () => {
                 this.emitLine("switch (this) {");
                 this.indent(() => {
-                    this.forEachEnumCase(e, "none", (name, jsonName) => {
+                    this.forEachEnumCase(e, "none", (name, value) => {
+                        const javaValue = this.formatJavaEnumValue(value, javaReturnType);
                         this.emitLine(
                             "case ",
                             name,
-                            ': return "',
-                            stringEscape(jsonName),
-                            '";',
+                            ": return ",
+                            javaValue,
+                            ";",
                         );
                     });
                 });
@@ -675,18 +677,20 @@ export class JavaRenderer extends ConvenienceRenderer {
             this.ensureBlankLine();
 
             this.emitEnumDeserializationAttributes(e);
+            const deserializationType = this.getJavaDeserializationTypeForEnum(e);
             this.emitBlock(
                 [
                     "public static ",
                     enumName,
-                    " forValue(String value) throws IOException",
+                    ` forValue(${deserializationType} value) throws IOException`,
                 ],
                 () => {
-                    this.forEachEnumCase(e, "none", (name, jsonName) => {
+                    this.forEachEnumCase(e, "none", (name, value) => {
+                        const javaComparison = this.formatJavaEnumComparison(value, deserializationType);
                         this.emitLine(
-                            'if (value.equals("',
-                            stringEscape(jsonName),
-                            '")) return ',
+                            "if (",
+                            javaComparison,
+                            ") return ",
                             name,
                             ";",
                         );
@@ -700,6 +704,72 @@ export class JavaRenderer extends ConvenienceRenderer {
             );
         });
         this.finishFile();
+    }
+
+    private getJavaReturnTypeForEnum(e: EnumType): string {
+        switch (e.valueType) {
+            case "number":
+                // Java doesn't distinguish int vs double in JSON context, use Number
+                return "Object"; // Could be Integer or Double
+            case "boolean":
+                return "Boolean";
+            case "string":
+            case "mixed":
+            default:
+                return "String";
+        }
+    }
+
+    private getJavaDeserializationTypeForEnum(e: EnumType): string {
+        // For deserialization, we need to handle the JSON input type
+        switch (e.valueType) {
+            case "number":
+                return "Object"; // Handle both Integer and Double from JSON
+            case "boolean":
+                return "Boolean";
+            case "string":
+            case "mixed":
+            default:
+                return "String";
+        }
+    }
+
+    private formatJavaEnumValue(value: string | number | boolean, javaReturnType: string): string {
+        if (javaReturnType === "String") {
+            return `"${stringEscape(String(value))}"`;
+        } else if (javaReturnType === "Boolean") {
+            return String(value);
+        } else if (javaReturnType === "Object") {
+            // For numbers, return the appropriate Java literal
+            if (typeof value === "number") {
+                return Number.isInteger(value) ? `${value}` : `${value}`;
+            }
+            return `"${stringEscape(String(value))}"`;
+        }
+        // Fallback to string
+        return `"${stringEscape(String(value))}"`;
+    }
+
+    private formatJavaEnumComparison(value: string | number | boolean, deserializationType: string): string {
+        if (deserializationType === "String") {
+            return `value.equals("${stringEscape(String(value))}")`;
+        } else if (deserializationType === "Boolean") {
+            return `value.equals(${String(value)})`;
+        } else if (deserializationType === "Object") {
+            // For numbers, we need to handle both Integer and Double
+            if (typeof value === "number") {
+                const intValue = Number.isInteger(value) ? `${value}` : null;
+                const doubleValue = `${value}`;
+                if (intValue) {
+                    return `(value instanceof Integer && value.equals(${intValue})) || (value instanceof Double && value.equals(${doubleValue}))`;
+                } else {
+                    return `value instanceof Double && value.equals(${doubleValue})`;
+                }
+            }
+            return `value.equals("${stringEscape(String(value))}")`;
+        }
+        // Fallback to string comparison
+        return `value.equals("${stringEscape(String(value))}")`;
     }
 
     protected emitSourceStructure(): void {

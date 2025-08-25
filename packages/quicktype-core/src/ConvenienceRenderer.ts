@@ -69,6 +69,7 @@ import {
     type Type,
     type TypeKind,
     UnionType,
+    enumCaseToStringKey,
 } from "./Type";
 import { TypeAttributeStoreView } from "./Type/TypeGraph";
 import {
@@ -722,7 +723,7 @@ export abstract class ConvenienceRenderer extends Renderer {
 
         const names = new Map<string, Name>();
         const accessorNames = enumCaseNames(e, this.targetLanguage.name);
-        for (const caseName of e.cases) {
+        for (const caseName of e.caseKeys) {
             const [assignedName, isFixed] = getAccessorName(
                 accessorNames,
                 caseName,
@@ -995,13 +996,26 @@ export abstract class ConvenienceRenderer extends Renderer {
     protected forEachEnumCase(
         e: EnumType,
         blankLocations: BlankLineConfig,
-        f: (name: Name, jsonName: string, position: ForEachPosition) => void,
+        f: (name: Name, value: string | number | boolean, position: ForEachPosition) => void,
     ): void {
         const caseNames = defined(this._caseNamesStoreView).get(e);
         const sortedCaseNames = mapSortBy(caseNames, (n) =>
             defined(this.names.get(n)),
         );
-        this.forEachWithBlankLines(sortedCaseNames, blankLocations, f);
+        
+        // Create a map from caseKey to actual value
+        const caseKeyToValue = new Map<string, string | number | boolean>();
+        for (const caseValue of e.cases) {
+            const caseKey = enumCaseToStringKey(caseValue, e.isMixed);
+            caseKeyToValue.set(caseKey, caseValue);
+        }
+        
+        this.forEachWithBlankLines(sortedCaseNames, blankLocations, (name: Name, caseKey: string, position: ForEachPosition) => {
+            const actualValue = caseKeyToValue.get(caseKey);
+            if (actualValue !== undefined) {
+                f(name, actualValue, position);
+            }
+        });
     }
 
     protected forEachTransformation(

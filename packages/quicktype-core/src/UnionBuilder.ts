@@ -229,7 +229,7 @@ export class UnionAccumulator<TArray, TObject>
     }
 
     public addEnum(
-        cases: ReadonlySet<string>,
+        cases: ReadonlySet<string | number | boolean>,
         attributes: TypeAttributes,
     ): void {
         const maybeStringAttributes = this._stringTypeAttributes.get("string");

@@ -193,8 +193,12 @@ export class JavaScriptRenderer extends ConvenienceRenderer {
             this.forEachEnum("none", (e, name) => {
                 this.emitLine('"', name, '": [');
                 this.indent(() => {
-                    this.forEachEnumCase(e, "none", (_caseName, jsonName) => {
-                        this.emitLine(`"${utf16StringEscape(jsonName)}",`);
+                    this.forEachEnumCase(e, "none", (_caseName, value) => {
+                        // JavaScript supports mixed enums
+                        const literal = typeof value === "string" 
+                            ? `"${utf16StringEscape(value)}"` 
+                            : String(value);
+                        this.emitLine(`${literal},`);
                     });
                 });
                 this.emitLine("],");

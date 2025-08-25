@@ -170,8 +170,12 @@ export class TypeScriptZodRenderer extends ConvenienceRenderer {
         this.emitDescription(this.descriptionForType(e));
         this.emitLine("\nexport const ", enumName, "Schema = ", "z.enum([");
         this.indent(() =>
-            this.forEachEnumCase(e, "none", (_, jsonName) => {
-                this.emitLine('"', stringEscape(jsonName), '",');
+            this.forEachEnumCase(e, "none", (_, value) => {
+                // TypeScript Zod supports mixed enums
+                const literal = typeof value === "string" 
+                    ? `"${stringEscape(value)}"` 
+                    : String(value);
+                this.emitLine(literal, ",");
             }),
         );
         this.emitLine("]);");

@@ -54,7 +54,7 @@ export abstract class TypeScriptFlowBaseRenderer extends JavaScriptRenderer {
             t instanceof EnumType &&
             t.cases.size === 1
         ) {
-            const item = t.cases.values().next().value ?? "";
+            const item = t.caseKeys.values().next().value ?? "";
             return singleWord(`"${utf16StringEscape(item)}"`);
         }
 

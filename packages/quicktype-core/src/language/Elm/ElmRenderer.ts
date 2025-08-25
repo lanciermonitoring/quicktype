@@ -396,7 +396,7 @@ export class ElmRenderer extends ConvenienceRenderer {
         this.emitLine("type ", enumName);
         this.indent(() => {
             let onFirst = true;
-            this.forEachEnumCase(e, "none", (name) => {
+            this.forEachEnumCase(e, "none", (name, _value) => {
                 const equalsOrPipe = onFirst ? "=" : "|";
                 this.emitLine(equalsOrPipe, " ", name);
                 onFirst = false;
@@ -508,29 +508,68 @@ export class ElmRenderer extends ConvenienceRenderer {
         });
     }
 
+    private getElmEnumDecoder(enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return "Jdec.int";
+        } else if (enumType.valueType === "boolean") {
+            return "Jdec.bool";
+        } else {
+            return "Jdec.string";
+        }
+    }
+
+    private getElmEnumPattern(value: string | number | boolean, enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            return value === true ? "True" : "False";
+        } else {
+            return `"${stringEscape(String(value))}"`;
+        }
+    }
+
+    private getElmEnumEncoder(value: string | number | boolean, enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return `Jenc.int ${value}`;
+        } else if (enumType.valueType === "boolean") {
+            return `Jenc.bool ${value === true ? "True" : "False"}`;
+        } else {
+            return `Jenc.string "${stringEscape(String(value))}"`;
+        }
+    }
+
     private emitEnumFunctions(e: EnumType, enumName: Name): void {
         const decoderName = this.decoderNameForNamedType(e);
+        const decoder = this.getElmEnumDecoder(e);
+        const varName = e.valueType === "number" ? "int" : e.valueType === "boolean" ? "bool" : "str";
+        
         this.emitLine(decoderName, " : Jdec.Decoder ", enumName);
         this.emitLine(decoderName, " =");
         this.indent(() => {
-            this.emitLine("Jdec.string");
+            this.emitLine(decoder);
             this.indent(() => {
-                this.emitLine("|> Jdec.andThen (\\str ->");
+                this.emitLine(`|> Jdec.andThen (\\${varName} ->`);
                 this.indent(() => {
-                    this.emitLine("case str of");
+                    this.emitLine(`case ${varName} of`);
                     this.indent(() => {
-                        this.forEachEnumCase(e, "none", (name, jsonName) => {
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            const pattern = this.getElmEnumPattern(value, e);
                             this.emitLine(
-                                '"',
-                                stringEscape(jsonName),
-                                '" -> Jdec.succeed ',
+                                pattern,
+                                " -> Jdec.succeed ",
                                 name,
                             );
                         });
+                        const errorMessage = e.valueType === "string" 
+                            ? "somethingElse" 
+                            : e.valueType === "boolean" 
+                                ? "Debug.toString somethingElse"
+                                : "String.fromInt somethingElse";
                         this.emitLine(
-                            'somethingElse -> Jdec.fail <| "Invalid ',
+                            `somethingElse -> Jdec.fail <| "Invalid `,
                             enumName,
-                            ': " ++ somethingElse',
+                            `: " ++ `,
+                            errorMessage,
                         );
                     });
                 });
@@ -543,12 +582,12 @@ export class ElmRenderer extends ConvenienceRenderer {
         this.emitLine(encoderName, " : ", enumName, " -> Jenc.Value");
         this.emitLine(encoderName, " x = case x of");
         this.indent(() => {
-            this.forEachEnumCase(e, "none", (name, jsonName) => {
+            this.forEachEnumCase(e, "none", (name, value) => {
+                const encoder = this.getElmEnumEncoder(value, e);
                 this.emitLine(
                     name,
-                    ' -> Jenc.string "',
-                    stringEscape(jsonName),
-                    '"',
+                    " -> ",
+                    encoder,
                 );
             });
         });

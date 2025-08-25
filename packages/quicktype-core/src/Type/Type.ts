@@ -723,21 +723,92 @@ export class MapType extends ObjectType {
 
 export function enumTypeIdentity(
     attributes: TypeAttributes,
-    cases: ReadonlySet<string>,
+    cases: ReadonlySet<unknown>,
 ): MaybeTypeIdentity {
     if (hasUniqueIdentityAttributes(attributes)) return undefined;
     return new TypeIdentity("enum", [identityAttributes(attributes), cases]);
 }
 
+
+export function enumCaseToStringKey(caseValue: string | number | boolean, isMixed = true): string {
+    // For pure enums, use the raw value without type prefixes
+    if (!isMixed) {
+        return String(caseValue);
+    }
+    
+    // For mixed enums, use type prefixes to distinguish between different types
+    if (typeof caseValue === "string") {
+        return `S${caseValue}`;
+    }
+    if (typeof caseValue === "number") {
+        return `N${caseValue}`;
+    }
+    if (typeof caseValue === "boolean") {
+        return `B${caseValue}`;
+    }
+    return String(caseValue);
+}
+
 export class EnumType extends Type {
     public readonly kind = "enum";
+    public readonly caseKeys: ReadonlySet<string>;
+
 
     public constructor(
         typeRef: TypeRef,
         graph: TypeGraph,
-        public readonly cases: ReadonlySet<string>,
+        public readonly cases: ReadonlySet<string | number | boolean>,
     ) {
         super(typeRef, graph);
+        
+        // Determine if this is a mixed enum first
+        const types = new Set<string>();
+        for (const caseValue of this.cases) {
+            types.add(typeof caseValue);
+        }
+        const isMixed = types.size > 1;
+        
+        // Generate case keys based on whether this is mixed or pure
+        this.caseKeys = new Set(Array.from(cases).map(caseValue => enumCaseToStringKey(caseValue, isMixed)));
+    }
+
+    public get valueType(): "string" | "number" | "boolean" | "mixed" {
+        const types = new Set<string>();
+        for (const caseValue of this.cases) {
+            types.add(typeof caseValue);
+        }
+        
+        if (types.size > 1) return "mixed";
+        if (types.has("number")) return "number";
+        if (types.has("boolean")) return "boolean";
+        return "string";
+    }
+
+    public get isMixed(): boolean {
+        return this.valueType === "mixed";
+    }
+
+    public get hasOnlyPrimitives(): boolean {
+        // Check if all values are string, number, or boolean (no complex types)
+        for (const caseValue of this.cases) {
+            const type = typeof caseValue;
+            if (type !== "string" && type !== "number" && type !== "boolean") {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public get stringCases(): ReadonlySet<string> {
+        return new Set(Array.from(this.cases).filter(c => typeof c === "string") as string[]);
+    }
+
+    public get numberCases(): ReadonlySet<number> {
+        return new Set(Array.from(this.cases).filter(c => typeof c === "number") as number[]);
+    }
+
+    public get booleanCases(): ReadonlySet<boolean> {
+        return new Set(Array.from(this.cases).filter(c => typeof c === "boolean") as boolean[]);
     }
 
     public get isNullable(): boolean {

@@ -414,7 +414,7 @@ export class CSharpRenderer extends ConvenienceRenderer {
 
     private emitEnumDefinition(e: EnumType, enumName: Name): void {
         const caseNames: Sourcelike[] = [];
-        this.forEachEnumCase(e, "none", (name) => {
+        this.forEachEnumCase(e, "none", (name, _value) => {
             if (caseNames.length > 0) caseNames.push(", ");
             caseNames.push(name);
         });

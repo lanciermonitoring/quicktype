@@ -101,25 +101,35 @@ export class CirceRenderer extends Scala3Renderer {
         this.emitLine(") derives Encoder.AsObject, Decoder");
     }
 
+    private getCirceEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        // For mixed enums, use string representation for consistency
+        if (enumType.isMixed) {
+            return ['"', String(value), '"'];
+        }
+
+        const valueType = typeof value;
+        if (valueType === "string") {
+            return ['"', String(value), '"'];
+        } else if (valueType === "number") {
+            return [String(value)];
+        } else if (valueType === "boolean") {
+            return [String(value)];
+        } else {
+            // Fallback to string representation
+            return ['"', String(value), '"'];
+        }
+    }
+
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
 
         this.ensureBlankLine();
         this.emitItem(["type ", enumName, " = "]);
         let count = e.cases.size;
-        this.forEachEnumCase(e, "none", (_, jsonName) => {
-            // if (!(jsonName == "")) {
-            /*                 const backticks = 
-															shouldAddBacktick(jsonName) || 
-															jsonName.includes(" ") || 
-															!isNaN(parseInt(jsonName.charAt(0)))
-													if (backticks) {this.emitItem("`")} else  */
-            this.emitItem(['"', jsonName, '"']);
-            //                if (backticks) {this.emitItem("`")}
+        this.forEachEnumCase(e, "none", (_, value) => {
+            const circeValue = this.getCirceEnumValue(value, e);
+            this.emitItem(circeValue);
             if (--count > 0) this.emitItem([" | "]);
-            // } else {
-            // --count
-            // }
         });
         this.ensureBlankLine();
     }

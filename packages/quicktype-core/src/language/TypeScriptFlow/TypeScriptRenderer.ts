@@ -74,21 +74,29 @@ export class TypeScriptRenderer extends TypeScriptFlowBaseRenderer {
         // enums with only one value are emitted as constants
         if (this._tsFlowOptions.preferConstValues && e.cases.size === 1) return;
 
-        if (this._tsFlowOptions.preferUnions) {
+        // For mixed enums or when preferUnions is true, emit as union type
+        if (this._tsFlowOptions.preferUnions || e.isMixed) {
             let items = "";
             e.cases.forEach((item) => {
+                const literal = typeof item === "string" 
+                    ? `"${utf16StringEscape(item)}"` 
+                    : String(item);
                 if (items === "") {
-                    items += `"${utf16StringEscape(item)}"`;
+                    items += literal;
                     return;
                 }
 
-                items += ` | "${utf16StringEscape(item)}"`;
+                items += ` | ${literal}`;
             });
             this.emitLine("export type ", enumName, " = ", items, ";");
         } else {
+            // Pure string/number/boolean enum - can use TypeScript enum
             this.emitBlock(["export enum ", enumName, " "], "", () => {
-                this.forEachEnumCase(e, "none", (name, jsonName) => {
-                    this.emitLine(name, ` = "${utf16StringEscape(jsonName)}",`);
+                this.forEachEnumCase(e, "none", (name, value) => {
+                    const literal = typeof value === "string"
+                        ? `"${utf16StringEscape(value)}"`
+                        : String(value);
+                    this.emitLine(name, ` = ${literal},`);
                 });
             });
         }
