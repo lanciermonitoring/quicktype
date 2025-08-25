@@ -1,11 +1,11 @@
 {
     "name": "quicktype-core",
-    "version": "18.0.15",
+    "version": "24.0.0",
     "description": "The quicktype engine as a library",
     "license": "Apache-2.0",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
-    "repository": "https://github.com/quicktype/quicktype",
+    "repository": "https://github.com/lanciermonitoring/quicktype",
     "scripts": {
         "clean": "rm -rf dist node_modules *~",
         "build": "./env.sh && tsc"

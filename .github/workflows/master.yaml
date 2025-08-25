@@ -7,12 +7,23 @@ on:
 jobs:
     publish:
         runs-on: ubuntu-22.04
+        permissions:
+            contents: read
+            packages: write
         steps:
             - uses: actions/checkout@v3
+
             - uses: ./.github/workflows/setup
               env:
                 PUBLISH: true
+
+            - name: Setup Node with GitHub Registry
+              uses: actions/setup-node@v4
+              with:
+                  node-version-file: '.nvmrc'
+                  registry-url: 'https://npm.pkg.github.com'
+                  scope: '@lanciermonitoring'
+
             - run: npm run pub
               env:
-                  NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-                  VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
+                  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
