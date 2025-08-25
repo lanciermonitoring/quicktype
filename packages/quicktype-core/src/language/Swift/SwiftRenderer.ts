@@ -870,13 +870,16 @@ encoder.dateEncodingStrategy = .formatted(formatter)`);
         this.ensureBlankLine();
 
         this.emitDescription(this.descriptionForType(e));
-        const protocolString = this.getProtocolString("enum", "String");
+        
+        // Determine Swift raw value type based on enum value types
+        const swiftRawType = this.getSwiftRawType(e);
+        const protocolString = this.getProtocolString("enum", swiftRawType);
 
         if (this._options.justTypes) {
             this.emitBlockWithAccess(
                 ["enum ", enumName, protocolString],
                 () => {
-                    this.forEachEnumCase(e, "none", (name) => {
+                    this.forEachEnumCase(e, "none", (name, _value) => {
                         this.emitLine("case ", name);
                     });
                 },
@@ -885,20 +888,52 @@ encoder.dateEncodingStrategy = .formatted(formatter)`);
             this.emitBlockWithAccess(
                 ["enum ", enumName, protocolString],
                 () => {
-                    this.forEachEnumCase(e, "none", (name, jsonName) => {
-                        this.emitLine(
-                            "case ",
-                            name,
-                            ' = "',
-                            stringEscape(jsonName),
-                            '"',
-                        );
+                    this.forEachEnumCase(e, "none", (name, value) => {
+                        const rawValue = this.formatSwiftRawValue(value, swiftRawType);
+                        this.emitLine("case ", name, " = ", rawValue);
                     });
                 },
             );
         }
 
         this.endFile();
+    }
+
+    private getSwiftRawType(e: EnumType): string {
+        // For mixed enums, always use String as fallback
+        if (e.isMixed) {
+            return "String";
+        }
+
+        // For pure type enums, use the appropriate Swift type
+        switch (e.valueType) {
+            case "number":
+                // Check if all numbers are integers
+                const allIntegers = Array.from(e.numberCases).every(n => Number.isInteger(n));
+                return allIntegers ? "Int" : "Double";
+            case "boolean":
+                // Swift doesn't have Bool raw values, use String
+                return "String";
+            case "string":
+                return "String";
+            default:
+                return "String";
+        }
+    }
+
+    private formatSwiftRawValue(value: string | number | boolean, swiftRawType: string): string {
+        if (swiftRawType === "String") {
+            // Always string-escape for String raw values
+            const stringValue = typeof value === "string" ? value : String(value);
+            return `"${stringEscape(stringValue)}"`;
+        } else if (swiftRawType === "Int" || swiftRawType === "Double") {
+            // Use numeric value directly for numeric raw values
+            return String(value);
+        }
+        
+        // Fallback to string
+        const stringValue = typeof value === "string" ? value : String(value);
+        return `"${stringEscape(stringValue)}"`;
     }
 
     private renderUnionDefinition(u: UnionType, unionName: Name): void {

@@ -391,7 +391,7 @@ export class TypeBuilder {
 
     public getEnumType(
         attributes: TypeAttributes,
-        cases: ReadonlySet<string>,
+        cases: ReadonlySet<string | number | boolean>,
         forwardingRef?: TypeRef,
     ): TypeRef {
         return this.getOrAddType(

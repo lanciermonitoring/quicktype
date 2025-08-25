@@ -133,17 +133,106 @@ export class KotlinXRenderer extends KotlinRenderer {
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
 
+        // For mixed enums, use regular enum with custom serializer
+        if (e.isMixed) {
+            this.emitLine(["@Serializable(with = ", enumName, "Serializer::class)"]);
+            this.emitBlock(["enum class ", enumName], () => {
+                let count = e.cases.size;
+                this.forEachEnumCase(e, "none", (name, _value) => {
+                    this.emitLine(name, --count === 0 ? "" : ",");
+                });
+            });
+            
+            // Emit custom serializer
+            this.ensureBlankLine();
+            this.emitLine(["object ", enumName, "Serializer : KSerializer<", enumName, ">"]);
+            this.emitBlock("", () => {
+                this.emitLine("override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor(\"", enumName, "\", PrimitiveKind.STRING)");
+                this.ensureBlankLine();
+                
+                this.emitBlock("override fun serialize(encoder: Encoder, value: " + this.sourcelikeToString(enumName) + ")", () => {
+                    this.emitLine("val jsonEncoder = encoder as JsonEncoder");
+                    this.emitLine("when (value) {");
+                    this.indent(() => {
+                        this.forEachEnumCase(e, "none", (name, caseValue) => {
+                            if (typeof caseValue === "string") {
+                                this.emitLine(enumName, ".", name, " -> jsonEncoder.encodeJsonElement(JsonPrimitive(\"", stringEscape(caseValue), "\"))");
+                            } else if (typeof caseValue === "number") {
+                                this.emitLine(enumName, ".", name, " -> jsonEncoder.encodeJsonElement(JsonPrimitive(", String(caseValue), "))");
+                            } else if (typeof caseValue === "boolean") {
+                                this.emitLine(enumName, ".", name, " -> jsonEncoder.encodeJsonElement(JsonPrimitive(", String(caseValue), "))");
+                            }
+                        });
+                    });
+                    this.emitLine("}");
+                });
+                
+                this.ensureBlankLine();
+                this.emitBlock("override fun deserialize(decoder: Decoder): " + this.sourcelikeToString(enumName), () => {
+                    this.emitLine("val jsonDecoder = decoder as JsonDecoder");
+                    this.emitLine("return when (val element = jsonDecoder.decodeJsonElement()) {");
+                    this.indent(() => {
+                        this.emitLine("is JsonPrimitive -> {");
+                        this.indent(() => {
+                            this.emitLine("when {");
+                            this.indent(() => {
+                                this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                    if (typeof caseValue === "string") {
+                                        this.emitLine("element.contentOrNull == \"", stringEscape(caseValue), "\" -> ", enumName, ".", name);
+                                    } else if (typeof caseValue === "number") {
+                                        if (Number.isInteger(caseValue)) {
+                                            this.emitLine("element.intOrNull == ", String(caseValue), " -> ", enumName, ".", name);
+                                        } else {
+                                            this.emitLine("element.doubleOrNull == ", String(caseValue), " -> ", enumName, ".", name);
+                                        }
+                                    } else if (typeof caseValue === "boolean") {
+                                        this.emitLine("element.booleanOrNull == ", String(caseValue), " -> ", enumName, ".", name);
+                                    }
+                                });
+                                this.emitLine("else -> throw SerializationException(\"Unknown value: $element\")");
+                            });
+                            this.emitLine("}");
+                        });
+                        this.emitLine("}");
+                        this.emitLine("else -> throw SerializationException(\"Expected primitive value\")");
+                    });
+                    this.emitLine("}");
+                });
+            });
+            return;
+        }
+
+        // Determine the enum value type
+        const valueType = e.valueType === "number" ? "Int" : 
+                         e.valueType === "boolean" ? "Boolean" : "String";
+        
         this.emitLine(["@Serializable"]);
-        this.emitBlock(["enum class ", enumName, "(val value: String)"], () => {
+        this.emitBlock(["enum class ", enumName, "(val value: ", valueType, ")"], () => {
             let count = e.cases.size;
-            this.forEachEnumCase(e, "none", (name, json) => {
-                const jsonEnum = stringEscape(json);
-                this.emitLine(
-                    `@SerialName("${jsonEnum}") `,
-                    name,
-                    `("${jsonEnum}")`,
-                    --count === 0 ? ";" : ",",
-                );
+            this.forEachEnumCase(e, "none", (name, value) => {
+                if (e.valueType === "string") {
+                    const escapedValue = stringEscape(value as string);
+                    this.emitLine(
+                        `@SerialName("${escapedValue}") `,
+                        name,
+                        `("${escapedValue}")`,
+                        --count === 0 ? ";" : ",",
+                    );
+                } else if (e.valueType === "number") {
+                    this.emitLine(
+                        `@SerialName("${value}") `,
+                        name,
+                        `(${value})`,
+                        --count === 0 ? ";" : ",",
+                    );
+                } else if (e.valueType === "boolean") {
+                    this.emitLine(
+                        `@SerialName("${value}") `,
+                        name,
+                        `(${value})`,
+                        --count === 0 ? ";" : ",",
+                    );
+                }
             });
         });
     }

@@ -333,6 +333,19 @@ export class Smithy4sRenderer extends ConvenienceRenderer {
         });
     }
 
+    private getSmithyEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        if (enumType.valueType === "string") {
+            return ['"', value, '"'];
+        } else if (enumType.valueType === "number") {
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            return String(value);
+        } else {
+            // Mixed enum fallback to string representation
+            return ['"', String(value), '"'];
+        }
+    }
+
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
 
@@ -340,22 +353,11 @@ export class Smithy4sRenderer extends ConvenienceRenderer {
         this.emitItem(["enum ", enumName, " { "]);
         let count = e.cases.size;
 
-        this.forEachEnumCase(e, "none", (name, jsonName) => {
-            // if (!(jsonName == "")) {
-            /*                 const backticks = 
-																	shouldAddBacktick(jsonName) || 
-																	jsonName.includes(" ") || 
-																	!isNaN(parseInt(jsonName.charAt(0)))
-															if (backticks) {this.emitItem("`")} else  */
+        this.forEachEnumCase(e, "none", (name, value) => {
             this.emitLine();
-
-            this.emitItem([name, ' = "', jsonName, '"']);
-
-            //                if (backticks) {this.emitItem("`")}
+            const smithyValue = this.getSmithyEnumValue(value, e);
+            this.emitItem([name, ' = ', smithyValue]);
             if (--count > 0) this.emitItem([","]);
-            // } else {
-            // --count
-            // }
         });
 
         this.ensureBlankLine();

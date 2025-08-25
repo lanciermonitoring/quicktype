@@ -301,44 +301,378 @@ export class RustRenderer extends ConvenienceRenderer {
 
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
+        
+        // For mixed enums, use custom serde serialization
+        if (e.isMixed) {
+            this.emitLine(
+                "#[derive(",
+                this._options.deriveDebug ? "Debug, " : "",
+                this._options.deriveClone ? "Clone, " : "",
+                this._options.derivePartialEq ? "PartialEq, " : "",
+                ")]",
+            );
+            
+            const blankLines = this._options.density === Density.Dense ? "none" : "interposing";
+            this.emitBlock(["pub enum ", enumName], () => {
+                this.forEachEnumCase(e, blankLines, (name, _value) => {
+                    this.emitLine([name, ","]);
+                });
+            });
+            
+            // Emit custom Serialize implementation
+            this.ensureBlankLine();
+            this.emitLine("impl Serialize for ", enumName, " {");
+            this.indent(() => {
+                this.emitLine("fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>");
+                this.emitLine("where");
+                this.indent(() => {
+                    this.emitLine("S: serde::Serializer,");
+                });
+                this.emitLine("{");
+                this.indent(() => {
+                    this.emitLine("match self {");
+                    this.indent(() => {
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            if (typeof value === "string") {
+                                this.emitLine(enumName, "::", name, " => serializer.serialize_str(\"", rustStringEscape(value), "\"),");
+                            } else if (typeof value === "number") {
+                                if (Number.isInteger(value)) {
+                                    this.emitLine(enumName, "::", name, " => serializer.serialize_i64(", String(value), "),");
+                                } else {
+                                    this.emitLine(enumName, "::", name, " => serializer.serialize_f64(", String(value), "),");
+                                }
+                            } else if (typeof value === "boolean") {
+                                this.emitLine(enumName, "::", name, " => serializer.serialize_bool(", String(value), "),");
+                            }
+                        });
+                    });
+                    this.emitLine("}");
+                });
+                this.emitLine("}");
+            });
+            this.emitLine("}");
+            
+            // Emit custom Deserialize implementation
+            this.ensureBlankLine();
+            this.emitLine("impl<'de> serde::Deserialize<'de> for ", enumName, " {");
+            this.indent(() => {
+                this.emitLine("fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>");
+                this.emitLine("where");
+                this.indent(() => {
+                    this.emitLine("D: serde::Deserializer<'de>,");
+                });
+                this.emitLine("{");
+                this.indent(() => {
+                    this.emitLine("struct ", enumName, "Visitor;");
+                    this.ensureBlankLine();
+                    
+                    this.emitLine("impl<'de> serde::de::Visitor<'de> for ", enumName, "Visitor {");
+                    this.indent(() => {
+                        this.emitLine("type Value = ", enumName, ";");
+                        this.ensureBlankLine();
+                        
+                        this.emitLine("fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {");
+                        this.indent(() => {
+                            this.emitLine("formatter.write_str(\"a valid ", enumName, " value\")");
+                        });
+                        this.emitLine("}");
+                        this.ensureBlankLine();
+                        
+                        // Add visit methods for each type we expect
+                        const hasString = Array.from(e.cases).some(v => typeof v === "string");
+                        const hasNumber = Array.from(e.cases).some(v => typeof v === "number");
+                        const hasBoolean = Array.from(e.cases).some(v => typeof v === "boolean");
+                        
+                        if (hasString) {
+                            this.emitLine("fn visit_str<E>(self, value: &str) -> Result<", enumName, ", E>");
+                            this.emitLine("where");
+                            this.indent(() => {
+                                this.emitLine("E: serde::de::Error,");
+                            });
+                            this.emitLine("{");
+                            this.indent(() => {
+                                this.emitLine("match value {");
+                                this.indent(() => {
+                                    this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                        if (typeof caseValue === "string") {
+                                            this.emitLine("\"", rustStringEscape(caseValue), "\" => Ok(", enumName, "::", name, "),");
+                                        }
+                                    });
+                                    this.emitLine("_ => Err(E::unknown_variant(value, &[\"", 
+                                        Array.from(e.cases).filter(v => typeof v === "string")
+                                            .map(v => rustStringEscape(v as string)).join("\", \""), 
+                                        "\"])),");
+                                });
+                                this.emitLine("}");
+                            });
+                            this.emitLine("}");
+                            this.ensureBlankLine();
+                        }
+                        
+                        if (hasNumber) {
+                            this.emitLine("fn visit_i64<E>(self, value: i64) -> Result<", enumName, ", E>");
+                            this.emitLine("where");
+                            this.indent(() => {
+                                this.emitLine("E: serde::de::Error,");
+                            });
+                            this.emitLine("{");
+                            this.indent(() => {
+                                this.emitLine("match value {");
+                                this.indent(() => {
+                                    this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                        if (typeof caseValue === "number" && Number.isInteger(caseValue)) {
+                                            this.emitLine(String(caseValue), " => Ok(", enumName, "::", name, "),");
+                                        }
+                                    });
+                                    this.emitLine("_ => Err(E::invalid_value(serde::de::Unexpected::Signed(value), &self)),");
+                                });
+                                this.emitLine("}");
+                            });
+                            this.emitLine("}");
+                            this.ensureBlankLine();
+                            
+                            this.emitLine("fn visit_f64<E>(self, value: f64) -> Result<", enumName, ", E>");
+                            this.emitLine("where");
+                            this.indent(() => {
+                                this.emitLine("E: serde::de::Error,");
+                            });
+                            this.emitLine("{");
+                            this.indent(() => {
+                                this.emitLine("match value {");
+                                this.indent(() => {
+                                    this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                        if (typeof caseValue === "number") {
+                                            this.emitLine("v if v == ", String(caseValue), " => Ok(", enumName, "::", name, "),");
+                                        }
+                                    });
+                                    this.emitLine("_ => Err(E::invalid_value(serde::de::Unexpected::Float(value), &self)),");
+                                });
+                                this.emitLine("}");
+                            });
+                            this.emitLine("}");
+                            this.ensureBlankLine();
+                        }
+                        
+                        if (hasBoolean) {
+                            this.emitLine("fn visit_bool<E>(self, value: bool) -> Result<", enumName, ", E>");
+                            this.emitLine("where");
+                            this.indent(() => {
+                                this.emitLine("E: serde::de::Error,");
+                            });
+                            this.emitLine("{");
+                            this.indent(() => {
+                                this.emitLine("match value {");
+                                this.indent(() => {
+                                    this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                        if (typeof caseValue === "boolean") {
+                                            this.emitLine(String(caseValue), " => Ok(", enumName, "::", name, "),");
+                                        }
+                                    });
+                                    this.emitLine("_ => Err(E::invalid_value(serde::de::Unexpected::Bool(value), &self)),");
+                                });
+                                this.emitLine("}");
+                            });
+                            this.emitLine("}");
+                            this.ensureBlankLine();
+                        }
+                    });
+                    this.emitLine("}");
+                    this.ensureBlankLine();
+                    
+                    this.emitLine("deserializer.deserialize_any(", enumName, "Visitor)");
+                });
+                this.emitLine("}");
+            });
+            this.emitLine("}");
+            return;
+        }
+
+        // For pure number/boolean enums, use custom serialization like mixed enums
+        // Only pure string enums can use standard serde derives
+        if (e.valueType === "string") {
+            this.emitLine(
+                "#[derive(",
+                this._options.deriveDebug ? "Debug, " : "",
+                this._options.deriveClone ? "Clone, " : "",
+                this._options.derivePartialEq ? "PartialEq, " : "",
+                "Serialize, Deserialize)]",
+            );
+
+            // List the possible naming styles for every enum case
+            const enumCasesNamingStyles: { [key: string]: string[] } = {};
+            this.forEachEnumCase(e, "none", (_name, value) => {
+                const actualValue = String(value);
+                enumCasesNamingStyles[actualValue] = listMatchingNamingStyles(actualValue);
+            });
+
+            // Set the default naming style on the enum
+            const defaultStyle = "PascalCase";
+            const preferedNamingStyle = getPreferredNamingStyle(
+                Object.values(enumCasesNamingStyles).flat(),
+                defaultStyle,
+            );
+            if (preferedNamingStyle !== defaultStyle) {
+                this.emitLine(`#[serde(rename_all = "${preferedNamingStyle}")]`);
+            }
+
+            const blankLines = this._options.density === Density.Dense ? "none" : "interposing";
+            this.emitBlock(["pub enum ", enumName], () =>
+                this.forEachEnumCase(e, blankLines, (name, value) => {
+                    this.emitRenameAttribute(name, value as string, defaultStyle, preferedNamingStyle);
+                    this.emitLine([name, ","]);
+                }),
+            );
+            return;
+        }
+
+        // For pure number/boolean enums, use custom serialization to handle correct JSON types
         this.emitLine(
             "#[derive(",
             this._options.deriveDebug ? "Debug, " : "",
             this._options.deriveClone ? "Clone, " : "",
             this._options.derivePartialEq ? "PartialEq, " : "",
-            "Serialize, Deserialize)]",
+            ")]",
         );
-
-        // List the possible naming styles for every enum case
-        const enumCasesNamingStyles: { [key: string]: string[] } = {};
-        this.forEachEnumCase(e, "none", (_name, jsonName) => {
-            enumCasesNamingStyles[jsonName] =
-                listMatchingNamingStyles(jsonName);
-        });
-
-        // Set the default naming style on the enum
-        const defaultStyle = "PascalCase";
-        const preferedNamingStyle = getPreferredNamingStyle(
-            Object.values(enumCasesNamingStyles).flat(),
-            defaultStyle,
-        );
-        if (preferedNamingStyle !== defaultStyle) {
-            this.emitLine(`#[serde(rename_all = "${preferedNamingStyle}")]`);
-        }
-
-        const blankLines =
-            this._options.density === Density.Dense ? "none" : "interposing";
-        this.emitBlock(["pub enum ", enumName], () =>
-            this.forEachEnumCase(e, blankLines, (name, jsonName) => {
-                this.emitRenameAttribute(
-                    name,
-                    jsonName,
-                    defaultStyle,
-                    preferedNamingStyle,
-                );
+        
+        const blankLines = this._options.density === Density.Dense ? "none" : "interposing";
+        this.emitBlock(["pub enum ", enumName], () => {
+            this.forEachEnumCase(e, blankLines, (name, _value) => {
                 this.emitLine([name, ","]);
-            }),
-        );
+            });
+        });
+        
+        // Emit custom Serialize implementation for number/boolean enums
+        this.ensureBlankLine();
+        this.emitLine("impl Serialize for ", enumName, " {");
+        this.indent(() => {
+            this.emitLine("fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>");
+            this.emitLine("where");
+            this.indent(() => {
+                this.emitLine("S: serde::Serializer,");
+            });
+            this.emitLine("{");
+            this.indent(() => {
+                this.emitLine("match self {");
+                this.indent(() => {
+                    this.forEachEnumCase(e, "none", (name, value) => {
+                        if (typeof value === "number") {
+                            if (Number.isInteger(value)) {
+                                this.emitLine(enumName, "::", name, " => serializer.serialize_i64(", String(value), "),");
+                            } else {
+                                this.emitLine(enumName, "::", name, " => serializer.serialize_f64(", String(value), "),");
+                            }
+                        } else if (typeof value === "boolean") {
+                            this.emitLine(enumName, "::", name, " => serializer.serialize_bool(", String(value), "),");
+                        }
+                    });
+                });
+                this.emitLine("}");
+            });
+            this.emitLine("}");
+        });
+        this.emitLine("}");
+        
+        // Emit custom Deserialize implementation for number/boolean enums
+        this.ensureBlankLine();
+        this.emitLine("impl<'de> serde::Deserialize<'de> for ", enumName, " {");
+        this.indent(() => {
+            this.emitLine("fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>");
+            this.emitLine("where");
+            this.indent(() => {
+                this.emitLine("D: serde::Deserializer<'de>,");
+            });
+            this.emitLine("{");
+            this.indent(() => {
+                this.emitLine("struct ", enumName, "Visitor;");
+                this.ensureBlankLine();
+                
+                this.emitLine("impl<'de> serde::de::Visitor<'de> for ", enumName, "Visitor {");
+                this.indent(() => {
+                    this.emitLine("type Value = ", enumName, ";");
+                    this.ensureBlankLine();
+                    
+                    this.emitLine("fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {");
+                    this.indent(() => {
+                        this.emitLine("formatter.write_str(\"a valid ", enumName, " value\")");
+                    });
+                    this.emitLine("}");
+                    this.ensureBlankLine();
+                    
+                    if (e.valueType === "number") {
+                        this.emitLine("fn visit_i64<E>(self, value: i64) -> Result<", enumName, ", E>");
+                        this.emitLine("where");
+                        this.indent(() => {
+                            this.emitLine("E: serde::de::Error,");
+                        });
+                        this.emitLine("{");
+                        this.indent(() => {
+                            this.emitLine("match value {");
+                            this.indent(() => {
+                                this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                    if (typeof caseValue === "number" && Number.isInteger(caseValue)) {
+                                        this.emitLine(String(caseValue), " => Ok(", enumName, "::", name, "),");
+                                    }
+                                });
+                                this.emitLine("_ => Err(E::invalid_value(serde::de::Unexpected::Signed(value), &self)),");
+                            });
+                            this.emitLine("}");
+                        });
+                        this.emitLine("}");
+                        this.ensureBlankLine();
+                        
+                        this.emitLine("fn visit_f64<E>(self, value: f64) -> Result<", enumName, ", E>");
+                        this.emitLine("where");
+                        this.indent(() => {
+                            this.emitLine("E: serde::de::Error,");
+                        });
+                        this.emitLine("{");
+                        this.indent(() => {
+                            this.emitLine("match value {");
+                            this.indent(() => {
+                                this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                    if (typeof caseValue === "number") {
+                                        this.emitLine("v if v == ", String(caseValue), " => Ok(", enumName, "::", name, "),");
+                                    }
+                                });
+                                this.emitLine("_ => Err(E::invalid_value(serde::de::Unexpected::Float(value), &self)),");
+                            });
+                            this.emitLine("}");
+                        });
+                        this.emitLine("}");
+                    } else if (e.valueType === "boolean") {
+                        this.emitLine("fn visit_bool<E>(self, value: bool) -> Result<", enumName, ", E>");
+                        this.emitLine("where");
+                        this.indent(() => {
+                            this.emitLine("E: serde::de::Error,");
+                        });
+                        this.emitLine("{");
+                        this.indent(() => {
+                            this.emitLine("match value {");
+                            this.indent(() => {
+                                this.forEachEnumCase(e, "none", (name, caseValue) => {
+                                    if (typeof caseValue === "boolean") {
+                                        this.emitLine(String(caseValue), " => Ok(", enumName, "::", name, "),");
+                                    }
+                                });
+                                this.emitLine("_ => Err(E::invalid_value(serde::de::Unexpected::Bool(value), &self)),");
+                            });
+                            this.emitLine("}");
+                        });
+                        this.emitLine("}");
+                    }
+                });
+                this.emitLine("}");
+                this.ensureBlankLine();
+                
+                if (e.valueType === "number") {
+                    this.emitLine("deserializer.deserialize_f64(", enumName, "Visitor)");
+                } else if (e.valueType === "boolean") {
+                    this.emitLine("deserializer.deserialize_bool(", enumName, "Visitor)");
+                }
+            });
+            this.emitLine("}");
+        });
+        this.emitLine("}");
     }
 
     protected emitTopLevelAlias(t: Type, name: Name): void {

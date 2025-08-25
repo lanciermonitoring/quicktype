@@ -194,8 +194,12 @@ export class TypeScriptEffectSchemaRenderer extends ConvenienceRenderer {
         this.emitDescription(this.descriptionForType(e));
         this.emitLine("\nexport const ", enumName, " = ", "S.Literal(");
         this.indent(() =>
-            this.forEachEnumCase(e, "none", (_, jsonName) => {
-                this.emitLine('"', stringEscape(jsonName), '",');
+            this.forEachEnumCase(e, "none", (_, value) => {
+                // TypeScript Effect Schema supports mixed enums
+                const literal = typeof value === "string" 
+                    ? `"${stringEscape(value)}"` 
+                    : String(value);
+                this.emitLine(literal, ",");
             }),
         );
         this.emitLine(");");

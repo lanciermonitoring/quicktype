@@ -900,10 +900,10 @@ export class DartRenderer extends ConvenienceRenderer {
         this.emitDescription(this.descriptionForType(e));
         this.emitLine("enum ", enumName, " {");
         this.indent(() => {
-            this.forEachEnumCase(e, "none", (name, jsonName, pos) => {
+            this.forEachEnumCase(e, "none", (name, _value, pos) => {
                 const comma = pos === "first" || pos === "middle" ? "," : [];
                 if (this._options.useJsonAnnotation) {
-                    this.emitLine('@JsonValue("', stringEscape(jsonName), '")');
+                    this.emitLine('@JsonValue("', stringEscape(String(_value)), '")');
                 }
 
                 this.emitLine(name, comma);
@@ -920,12 +920,12 @@ export class DartRenderer extends ConvenienceRenderer {
             " = EnumValues({",
         );
         this.indent(() => {
-            this.forEachEnumCase(e, "none", (name, jsonName, pos) => {
+            this.forEachEnumCase(e, "none", (name, value, pos) => {
                 const comma = pos === "first" || pos === "middle" ? "," : [];
+                const dartKey = this.formatDartEnumKey(value);
                 this.emitLine(
-                    '"',
-                    stringEscape(jsonName),
-                    '": ',
+                    dartKey,
+                    ": ",
                     enumName,
                     ".",
                     name,
@@ -936,6 +936,18 @@ export class DartRenderer extends ConvenienceRenderer {
         this.emitLine("});");
 
         this._needEnumValues = true;
+    }
+
+    private formatDartEnumKey(value: string | number | boolean): string {
+        if (typeof value === "string") {
+            return `"${stringEscape(value)}"`;
+        } else if (typeof value === "number") {
+            return String(value);
+        } else if (typeof value === "boolean") {
+            return String(value);
+        }
+        // Fallback to string
+        return `"${stringEscape(String(value))}"`;
     }
 
     protected emitEnumValues(): void {

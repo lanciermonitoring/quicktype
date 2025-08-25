@@ -1046,6 +1046,98 @@ export class ElixirRenderer extends ConvenienceRenderer {
         return true;
     }
 
+    /**
+     * Format enum value appropriately for Elixir based on the enum type
+     */
+    private formatElixirEnumValue(value: string | number | boolean, enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            // Numbers: generate raw numbers [0, 1, 2, 3]
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            // Booleans: generate raw booleans [true, false]
+            return String(value);
+        } else {
+            // Strings or mixed: generate atoms [:a, :b] or [:"0", :"1"]
+            const stringValue = String(value);
+            if (this.isValidAtom(stringValue)) {
+                return `:${stringValue}`;
+            } else {
+                return `:"${stringValue}"`;
+            }
+        }
+    }
+
+    /**
+     * Emit type-appropriate validation and encode/decode functions for enum
+     */
+    private emitElixirEnumFunctions(enumType: EnumType): void {
+        if (enumType.valueType === "number") {
+            this.emitMultiline(`def valid_value?(value), do: value in @valid_enum_members
+
+def encode(value) do
+	if valid_value?(value) do
+		value
+	else
+		{:error, "Unexpected value when encoding number: #{inspect(value)}"}
+	end
+end
+
+def decode(value) do
+	if valid_value?(value) do
+		value
+	else
+		{:error, "Unexpected value when decoding number: #{inspect(value)}"}
+	end
+end`);
+        } else if (enumType.valueType === "boolean") {
+            this.emitMultiline(`def valid_value?(value), do: value in @valid_enum_members
+
+def encode(value) do
+	if valid_value?(value) do
+		value
+	else
+		{:error, "Unexpected value when encoding boolean: #{inspect(value)}"}
+	end
+end
+
+def decode(value) do
+	if valid_value?(value) do
+		value
+	else
+		{:error, "Unexpected value when decoding boolean: #{inspect(value)}"}
+	end
+end`);
+        } else {
+            // String or mixed - use atom-based approach
+            this.emitMultiline(`def valid_atom?(value), do: value in @valid_enum_members
+
+def valid_atom_string?(value) do
+	try do
+		atom = String.to_existing_atom(value)
+		atom in @valid_enum_members
+	rescue
+		ArgumentError -> false
+	end
+end
+
+def encode(value) do
+	if valid_atom?(value) do
+		Atom.to_string(value)
+	else
+		{:error, "Unexpected value when encoding atom: #{inspect(value)}"}
+	end
+end
+
+def decode(value) do
+	if valid_atom_string?(value) do
+		String.to_existing_atom(value)
+	else
+		{:error, "Unexpected value when decoding atom: #{inspect(value)}"}
+	end
+end`);
+        }
+    }
+
     protected emitEnum(e: EnumType, enumName: Name): void {
         this.emitBlock(
             ["defmodule ", this.nameWithNamespace(enumName), " do"],
@@ -1053,12 +1145,9 @@ export class ElixirRenderer extends ConvenienceRenderer {
                 this.emitDescription(this.descriptionForType(e));
                 this.emitLine("@valid_enum_members [");
                 this.indent(() => {
-                    this.forEachEnumCase(e, "none", (_name, json) => {
-                        if (this.isValidAtom(json)) {
-                            this.emitLine(":", json, ",");
-                        } else {
-                            this.emitLine(":", `"${json}"`, ",");
-                        }
+                    this.forEachEnumCase(e, "none", (_name, value) => {
+                        const enumValue = this.formatElixirEnumValue(value, e);
+                        this.emitLine(enumValue, ",");
                     });
                 });
 
@@ -1066,34 +1155,11 @@ export class ElixirRenderer extends ConvenienceRenderer {
 
                 this.ensureBlankLine();
 
-                this.emitMultiline(`def valid_atom?(value), do: value in @valid_enum_members
+                this.emitElixirEnumFunctions(e);
 
-def valid_atom_string?(value) do
-	try do
-			atom = String.to_existing_atom(value)
-			atom in @valid_enum_members
-	rescue
-			ArgumentError -> false
-	end
-end
+                this.ensureBlankLine();
 
-def encode(value) do
-	if valid_atom?(value) do
-			Atom.to_string(value)
-	else
-			{:error, "Unexpected value when encoding atom: #{inspect(value)}"}
-	end
-end
-
-def decode(value) do
-	if valid_atom_string?(value) do
-			String.to_existing_atom(value)
-	else
-			{:error, "Unexpected value when decoding atom: #{inspect(value)}"}
-	end
-end
-
-def from_json(json) do
+                this.emitMultiline(`def from_json(json) do
 	json
 	|> Jason.decode!()
 	|> decode()

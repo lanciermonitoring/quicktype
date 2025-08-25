@@ -295,35 +295,55 @@ export class Scala3Renderer extends ConvenienceRenderer {
         this.emitLine(")");
     }
 
+    private getScalaEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
+        if (enumType.valueType === "string") {
+            return [`"${value}"`];
+        } else if (enumType.valueType === "number") {
+            return String(value);
+        } else if (enumType.valueType === "boolean") {
+            return String(value);
+        } else {
+            // Mixed enum fallback to string representation
+            return [`"${String(value)}"`];
+        }
+    }
+
+    private getScalaEnumType(enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return "Int";
+        } else if (enumType.valueType === "boolean") {
+            return "Boolean";
+        } else {
+            return "String";
+        }
+    }
+
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
 
+        const scalaType = this.getScalaEnumType(e);
         this.emitBlock(
-            ["enum ", enumName, " : "],
+            ["enum ", enumName, "(val value: ", scalaType, ") :"],
             () => {
-                let count = e.cases.size;
-                if (count > 0) {
-                    this.emitItem("\t case ");
-                }
-
-                this.forEachEnumCase(e, "none", (name, jsonName) => {
+                this.forEachEnumCase(e, "none", (name, jsonName, value) => {
                     if (!(jsonName === "")) {
+                        const scalaValue = this.getScalaEnumValue(value, e);
                         const backticks =
                             shouldAddBacktick(jsonName) ||
                             jsonName.includes(" ") ||
                             !Number.isNaN(Number.parseInt(jsonName.charAt(0)));
-                        if (backticks) {
-                            this.emitItem("`");
-                        }
-
-                        this.emitItemOnce([name]);
-                        if (backticks) {
-                            this.emitItem("`");
-                        }
-
-                        if (--count > 0) this.emitItem([","]);
-                    } else {
-                        --count;
+                        
+                        this.emitLine([
+                            "\t case ",
+                            backticks ? "`" : "",
+                            name,
+                            backticks ? "`" : "",
+                            " extends ",
+                            enumName,
+                            "(",
+                            scalaValue,
+                            ")"
+                        ]);
                     }
                 });
             },

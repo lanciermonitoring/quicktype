@@ -92,8 +92,8 @@ export function enumCaseNames(
         e.getAttributes(),
     );
     if (accessors === undefined)
-        return mapMap(e.cases.entries(), (_) => undefined);
-    return mapMap(e.cases.entries(), (c) => lookupKey(accessors, c, language));
+        return mapMap(e.caseKeys.entries(), (_) => undefined);
+    return mapMap(e.caseKeys.entries(), (c) => lookupKey(accessors, c, language));
 }
 
 export function getAccessorName(

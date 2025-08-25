@@ -231,7 +231,7 @@ export class HaskellRenderer extends ConvenienceRenderer {
         this.emitLine("data ", enumName);
         this.indent(() => {
             let onFirst = true;
-            this.forEachEnumCase(e, "none", (name) => {
+            this.forEachEnumCase(e, "none", (name, _value) => {
                 const equalsOrPipe = onFirst ? "=" : "|";
                 this.emitLine(equalsOrPipe, " ", name, enumName);
                 onFirst = false;
@@ -349,17 +349,31 @@ export class HaskellRenderer extends ConvenienceRenderer {
         this.emitClassDecoderInstance(c, className);
     }
 
+    /**
+     * Get the appropriate Haskell JSON value for an enum value
+     */
+    private getHaskellJSONValue(value: string | number | boolean, enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return String(value);  // Raw number: 0, 1, 2, 3
+        } else if (enumType.valueType === "boolean") {
+            return String(value);  // Raw boolean: True, False  
+        } else {
+            // String or mixed - quote it
+            return `"${stringEscape(String(value))}"`;
+        }
+    }
+
     private emitEnumEncoderInstance(e: EnumType, enumName: Name): void {
         this.emitLine("instance ToJSON ", enumName, " where");
         this.indent(() => {
-            this.forEachEnumCase(e, "none", (name, jsonName) => {
+            this.forEachEnumCase(e, "none", (name, value) => {
+                const jsonValue = this.getHaskellJSONValue(value, e);
                 this.emitLine(
                     "toJSON ",
                     name,
                     enumName,
-                    ' = "',
-                    stringEscape(jsonName),
-                    '"',
+                    " = ",
+                    jsonValue,
                 );
             });
         });
@@ -368,21 +382,60 @@ export class HaskellRenderer extends ConvenienceRenderer {
     private emitEnumDecoderInstance(e: EnumType, enumName: Name): void {
         this.emitLine("instance FromJSON ", enumName, " where");
         this.indent(() => {
-            this.emitLine('parseJSON = withText "', enumName, '" parseText');
-            this.indent(() => {
-                this.emitLine("where");
+            if (e.valueType === "number") {
+                this.emitLine('parseJSON = withScientific "', enumName, '" parseNumber');
                 this.indent(() => {
-                    this.forEachEnumCase(e, "none", (name, jsonName) => {
-                        this.emitLine(
-                            'parseText "',
-                            stringEscape(jsonName),
-                            '" = return ',
-                            name,
-                            enumName,
-                        );
+                    this.emitLine("where");
+                    this.indent(() => {
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            this.emitLine(
+                                'parseNumber ',
+                                String(value),
+                                ' = return ',
+                                name,
+                                enumName,
+                            );
+                        });
+                        this.emitLine('parseNumber _ = fail "Invalid ', enumName, '"');
                     });
                 });
-            });
+            } else if (e.valueType === "boolean") {
+                this.emitLine('parseJSON = withBool "', enumName, '" parseBool');
+                this.indent(() => {
+                    this.emitLine("where");
+                    this.indent(() => {
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            const haskellBool = value === true ? "True" : "False";
+                            this.emitLine(
+                                'parseBool ',
+                                haskellBool,
+                                ' = return ',
+                                name,
+                                enumName,
+                            );
+                        });
+                        this.emitLine('parseBool _ = fail "Invalid ', enumName, '"');
+                    });
+                });
+            } else {
+                // String or mixed - use withText
+                this.emitLine('parseJSON = withText "', enumName, '" parseText');
+                this.indent(() => {
+                    this.emitLine("where");
+                    this.indent(() => {
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            this.emitLine(
+                                'parseText "',
+                                stringEscape(String(value)),
+                                '" = return ',
+                                name,
+                                enumName,
+                            );
+                        });
+                        this.emitLine('parseText _ = fail "Invalid ', enumName, '"');
+                    });
+                });
+            }
         });
     }
 

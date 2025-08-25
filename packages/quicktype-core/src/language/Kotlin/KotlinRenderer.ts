@@ -11,6 +11,7 @@ import type { RenderContext } from "../../Renderer";
 import type { OptionValues } from "../../RendererOptions";
 import { type Sourcelike, maybeAnnotated } from "../../Source";
 import { acronymStyle } from "../../support/Acronyms";
+import { stringEscape } from "../../support/Strings";
 import type { TargetLanguage } from "../../TargetLanguage";
 import {
     ArrayType,
@@ -329,11 +330,31 @@ export class KotlinRenderer extends ConvenienceRenderer {
 
     protected emitEnumDefinition(e: EnumType, enumName: Name): void {
         this.emitDescription(this.descriptionForType(e));
+        
+        // For mixed enums, use simple enum constants (no values)
+        if (e.isMixed) {
+            this.emitBlock(["enum class ", enumName], () => {
+                let count = e.cases.size;
+                this.forEachEnumCase(e, "none", (name, _value) => {
+                    this.emitLine(name, --count === 0 ? "" : ",");
+                });
+            });
+            return;
+        }
 
-        this.emitBlock(["enum class ", enumName], () => {
+        // For pure enums, use typed values
+        const valueType = e.valueType === "number" ? "Int" : 
+                         e.valueType === "boolean" ? "Boolean" : "String";
+        
+        this.emitBlock(["enum class ", enumName, "(val value: ", valueType, ")"], () => {
             let count = e.cases.size;
-            this.forEachEnumCase(e, "none", (name) => {
-                this.emitLine(name, --count === 0 ? "" : ",");
+            this.forEachEnumCase(e, "none", (name, value) => {
+                if (e.valueType === "string") {
+                    const escapedValue = stringEscape(value as string);
+                    this.emitLine(name, `("${escapedValue}")`, --count === 0 ? "" : ",");
+                } else {
+                    this.emitLine(name, `(${value})`, --count === 0 ? "" : ",");
+                }
             });
         });
     }

@@ -169,8 +169,19 @@ export class JSONSchemaRenderer extends ConvenienceRenderer {
         return oneOf;
     }
 
+    private getJsonSchemaEnumType(enumType: EnumType): string {
+        if (enumType.valueType === "number") {
+            return "number";
+        } else if (enumType.valueType === "boolean") {
+            return "boolean";
+        } else {
+            return "string";
+        }
+    }
+
     private definitionForEnum(e: EnumType, title: string): Schema {
-        const schema = { type: "string", enum: Array.from(e.cases), title };
+        const enumType = this.getJsonSchemaEnumType(e);
+        const schema = { type: enumType, enum: Array.from(e.cases), title };
         this.addAttributesToSchema(e, schema);
         return schema;
     }

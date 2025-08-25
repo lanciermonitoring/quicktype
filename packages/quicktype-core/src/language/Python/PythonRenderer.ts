@@ -380,8 +380,12 @@ export class PythonRenderer extends ConvenienceRenderer {
 
     protected emitEnum(t: EnumType): void {
         this.declareType(t, () => {
-            this.forEachEnumCase(t, "none", (name, jsonName) => {
-                this.emitLine([name, " = ", this.string(jsonName)]);
+            this.forEachEnumCase(t, "none", (name, value) => {
+                // Python can handle mixed enums by using the actual value
+                const literal = typeof value === "string" 
+                    ? this.string(value)
+                    : String(value);
+                this.emitLine([name, " = ", literal]);
             });
         });
     }

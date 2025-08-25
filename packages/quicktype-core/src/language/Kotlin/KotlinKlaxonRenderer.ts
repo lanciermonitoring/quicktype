@@ -283,10 +283,11 @@ export class KotlinKlaxonRenderer extends KotlinRenderer {
 
         this.emitBlock(["enum class ", enumName, "(val value: String)"], () => {
             let count = e.cases.size;
-            this.forEachEnumCase(e, "none", (name, json) => {
+            this.forEachEnumCase(e, "none", (name, value) => {
+                const actualValue = typeof value === "string" ? stringEscape(value) : String(value);
                 this.emitLine(
                     name,
-                    `("${stringEscape(json)}")`,
+                    `("${actualValue}")`,
                     --count === 0 ? ";" : ",",
                 );
             });
@@ -300,9 +301,10 @@ export class KotlinKlaxonRenderer extends KotlinRenderer {
                     ],
                     () => {
                         const table: Sourcelike[][] = [];
-                        this.forEachEnumCase(e, "none", (name, json) => {
+                        this.forEachEnumCase(e, "none", (name, value) => {
+                            const actualValue = typeof value === "string" ? stringEscape(value) : String(value);
                             table.push([
-                                [`"${stringEscape(json)}"`],
+                                [`"${actualValue}"`],
                                 [" -> ", name],
                             ]);
                         });
