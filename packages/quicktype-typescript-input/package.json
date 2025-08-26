@@ -11,8 +11,8 @@
         "build": "tsc"
     },
     "dependencies": {
-        "quicktype-core": "file:../quicktype-core",
-        "typescript": "4.9.5",
+        "@lanciermonitoring/quicktype-core": "file:../quicktype-core",
+        "typescript": "~5.9.2",
         "@mark.probst/typescript-json-schema": "0.55.0"
     },
     "devDependencies": {

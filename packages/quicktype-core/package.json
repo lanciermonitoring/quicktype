@@ -37,7 +37,7 @@
         "@types/urijs": "^1.19.25",
         "@types/wordwrap": "^1.0.3",
         "command-line-args": "^5.2.1",
-        "typescript": "~5.8.3"
+        "typescript": "~5.9.2"
     },
     "overrides": {
         "cross-fetch": {

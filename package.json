@@ -34,13 +34,13 @@
         "graphql": "^0.11.7",
         "lodash": "^4.17.21",
         "moment": "^2.30.1",
-        "@lanciermonitoring/quicktype-core": "24.0.0",
-        "@lanciermonitoring/quicktype-graphql-input": "18.0.15",
-        "@lanciermonitoring/quicktype-typescript-input": "18.0.15",
+        "@lanciermonitoring/quicktype-core": "20.0.12",
+        "@lanciermonitoring/quicktype-graphql-input": "20.0.2",
+        "@lanciermonitoring/quicktype-typescript-input": "20.0.2",
         "readable-stream": "^4.5.2",
         "stream-json": "1.8.0",
         "string-to-stream": "^3.0.1",
-        "typescript": "~5.8.3"
+        "typescript": "~5.9.2"
     },
     "devDependencies": {
         "@biomejs/biome": "^1.9.4",
