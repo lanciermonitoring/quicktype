@@ -296,14 +296,20 @@ export class Scala3Renderer extends ConvenienceRenderer {
     }
 
     private getScalaEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
-        if (enumType.valueType === "string") {
+        // For mixed enums, all values need to be strings since Scala enum has single String parameter
+        if (enumType.isMixed) {
+            return [`"${String(value)}"`];
+        }
+
+        const valueType = typeof value;
+        if (valueType === "string") {
             return [`"${value}"`];
-        } else if (enumType.valueType === "number") {
+        } else if (valueType === "number") {
             return String(value);
-        } else if (enumType.valueType === "boolean") {
+        } else if (valueType === "boolean") {
             return String(value);
         } else {
-            // Mixed enum fallback to string representation
+            // Should not reach here for known types
             return [`"${String(value)}"`];
         }
     }
@@ -325,14 +331,15 @@ export class Scala3Renderer extends ConvenienceRenderer {
         this.emitBlock(
             ["enum ", enumName, "(val value: ", scalaType, ") :"],
             () => {
-                this.forEachEnumCase(e, "none", (name, jsonName, value) => {
+                this.forEachEnumCase(e, "none", (name, value, _position) => {
+                    const jsonName = String(value);
                     if (!(jsonName === "")) {
                         const scalaValue = this.getScalaEnumValue(value, e);
                         const backticks =
                             shouldAddBacktick(jsonName) ||
                             jsonName.includes(" ") ||
                             !Number.isNaN(Number.parseInt(jsonName.charAt(0)));
-                        
+
                         this.emitLine([
                             "\t case ",
                             backticks ? "`" : "",

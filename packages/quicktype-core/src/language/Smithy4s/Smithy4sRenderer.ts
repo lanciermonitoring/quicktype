@@ -334,14 +334,20 @@ export class Smithy4sRenderer extends ConvenienceRenderer {
     }
 
     private getSmithyEnumValue(value: string | number | boolean, enumType: EnumType): Sourcelike {
-        if (enumType.valueType === "string") {
-            return ['"', value, '"'];
-        } else if (enumType.valueType === "number") {
-            return String(value);
-        } else if (enumType.valueType === "boolean") {
-            return String(value);
+        // For mixed enums, use string representation for consistency
+        if (enumType.isMixed) {
+            return ['"', String(value), '"'];
+        }
+
+        const valueType = typeof value;
+        if (valueType === "string") {
+            return ['"', String(value), '"'];
+        } else if (valueType === "number") {
+            return [String(value)];
+        } else if (valueType === "boolean") {
+            return [String(value)];
         } else {
-            // Mixed enum fallback to string representation
+            // Fallback to string representation
             return ['"', String(value), '"'];
         }
     }

@@ -282,15 +282,16 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
     /**
      * Get the appropriate C++ JSON value/comparison for an enum value
      */
-    private getCppEnumJsonValue(value: string | number | boolean, enumType: EnumType): Sourcelike[] {
-        if (enumType.valueType === "number") {
+    private getCppEnumJsonValue(value: string | number | boolean, _enumType: EnumType): Sourcelike[] {
+        const valueType = typeof value;
+        if (valueType === "number") {
             // Return raw number for comparison/assignment
             return [String(value)];
-        } else if (enumType.valueType === "boolean") {
+        } else if (valueType === "boolean") {
             // Return C++ boolean
             return [String(value)];
         } else {
-            // String or mixed - use string literal
+            // String - use string literal
             return [this._stringType.createStringLiteral([stringEscape(String(value))])];
         }
     }
@@ -1907,6 +1908,12 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
     }
 
     private isLargeEnum(e: EnumType): boolean {
+        // Mixed enums cannot use the string-based hash map optimization
+        // because they contain non-string JSON values
+        if (e.isMixed) {
+            return false;
+        }
+
         // This is just an estimation. Someone might want to do some
         // benchmarks to find the optimum value here
         return e.cases.size > 15;
@@ -1941,7 +1948,7 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                             this.forEachEnumCase(
                                 e,
                                 "none",
-                                (name, jsonName, _value) => {
+                                (name, value, _position) => {
                                     this.emitLine(
                                         "{",
                                         this._stringType.wrapEncodingChange(
@@ -1950,7 +1957,7 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                                             this.NarrowString.getType(),
                                             [
                                                 this._stringType.createStringLiteral(
-                                                    [stringEscape(jsonName)],
+                                                    [stringEscape(String(value))],
                                                 ),
                                             ],
                                         ),
@@ -1981,8 +1988,9 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                     this.forEachEnumCase(e, "none", (name, value) => {
                         const maybeElse = onFirst ? "" : "else ";
                         const jsonValue = this.getCppEnumJsonValue(value, e);
-                        
-                        if (e.valueType === "number" || e.valueType === "boolean") {
+
+                        const valueType = typeof value;
+                        if (valueType === "number" || valueType === "boolean") {
                             // For numbers and booleans, compare directly without string wrapping
                             this.emitLine(
                                 maybeElse,
@@ -2035,7 +2043,7 @@ export class CPlusPlusRenderer extends ConvenienceRenderer {
                 this.emitBlock("switch (x)", false, () => {
                     this.forEachEnumCase(e, "none", (name, value) => {
                         const jsonValue = this.getCppEnumJsonValue(value, e);
-                        
+
                         if (e.valueType === "number" || e.valueType === "boolean") {
                             // For numbers and booleans, assign directly
                             this.emitLine(
