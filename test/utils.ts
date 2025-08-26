@@ -5,7 +5,7 @@ import * as _ from "lodash";
 import * as shell from "shelljs";
 
 import { main as quicktype_, type CLIOptions } from "../src";
-import type { RendererOptions } from "quicktype-core";
+import type { RendererOptions } from "@lanciermonitoring/quicktype-core";
 import type * as languages from "./languages";
 import deepEquals from "./lib/deepEquals";
 

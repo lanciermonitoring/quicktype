@@ -6,7 +6,7 @@ import {
     type JSONSchemaSourceData,
     defined,
     messageError,
-} from "quicktype-core";
+} from "@lanciermonitoring/quicktype-core";
 import * as ts from "typescript";
 
 const settings: PartialArgs = {
@@ -43,8 +43,8 @@ export function schemaForTypeScriptSources(
         });
     }
 
-    // this breaks after upgrading to TS 5+
-    const schema = generateSchema(program, "*", settings);
+    // TODO: this broke after upgrading to TS 5+, so we use any for now
+    const schema = generateSchema(program as any, "*", settings);
     const uris: string[] = [];
     let topLevelName = "";
 

@@ -1,11 +1,11 @@
 {
-    "name": "quicktype-core",
-    "version": "18.0.15",
+    "name": "@lanciermonitoring/quicktype-core",
+    "version": "24.0.0",
     "description": "The quicktype engine as a library",
     "license": "Apache-2.0",
     "main": "dist/index.js",
     "types": "dist/index.d.ts",
-    "repository": "https://github.com/quicktype/quicktype",
+    "repository": "https://github.com/lanciermonitoring/quicktype",
     "scripts": {
         "clean": "rm -rf dist node_modules *~",
         "build": "./env.sh && tsc"
@@ -37,7 +37,7 @@
         "@types/urijs": "^1.19.25",
         "@types/wordwrap": "^1.0.3",
         "command-line-args": "^5.2.1",
-        "typescript": "~5.8.3"
+        "typescript": "~5.9.2"
     },
     "overrides": {
         "cross-fetch": {

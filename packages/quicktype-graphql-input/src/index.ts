@@ -27,7 +27,7 @@ import {
     namesTypeAttributeKind,
     panic,
     removeNullFromUnion,
-} from "quicktype-core";
+} from "@lanciermonitoring/quicktype-core";
 
 import { type GraphQLSchema, TypeKind } from "./GraphQLSchema";
 

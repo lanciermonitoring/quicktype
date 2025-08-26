@@ -1,5 +1,5 @@
 {
-    "name": "quicktype-graphql-input",
+    "name": "@lanciermonitoring/quicktype-graphql-input",
     "version": "18.0.15",
     "package": "Package for using GraphQL as an input language to quicktype",
     "license": "Apache-2.0",
@@ -11,14 +11,14 @@
         "build": "tsc"
     },
     "dependencies": {
-        "quicktype-core": "file:../quicktype-core",
+        "@lanciermonitoring/quicktype-core": "file:../quicktype-core",
         "collection-utils": "^1.0.1",
         "graphql": "^0.11.7"
     },
     "devDependencies": {
         "@types/node": "~22.14.0",
         "@types/graphql": "^0.11.7",
-        "typescript": "~5.8.3"
+        "typescript": "5.9.2"
     },
     "files": ["dist"]
 }

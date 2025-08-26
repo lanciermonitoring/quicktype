@@ -15,8 +15,8 @@ import {
     jsonInputForTargetLanguage,
     languageNamed,
     quicktype,
-} from "quicktype-core";
-import { schemaForTypeScriptSources } from "quicktype-typescript-input";
+} from "@lanciermonitoring/quicktype-core";
+import { schemaForTypeScriptSources } from "@lanciermonitoring/quicktype-typescript-input";
 // eslint-disable-next-line import/no-unresolved
 import * as vscode from "vscode";
 
