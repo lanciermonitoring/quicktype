@@ -1,4 +1,4 @@
-import type { LanguageName } from "quicktype-core";
+import type { LanguageName } from "@lanciermonitoring/quicktype-core";
 
 import * as process from "process";
 // @ts-ignore

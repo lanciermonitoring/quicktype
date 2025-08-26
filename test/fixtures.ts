@@ -23,7 +23,7 @@ import {
     callAndExpectFailure,
 } from "./utils";
 import * as languages from "./languages";
-import type { LanguageName, Option, RendererOptions } from "quicktype-core";
+import type { LanguageName, Option, RendererOptions } from "@lanciermonitoring/quicktype-core";
 import {
     mustNotHappen,
     defined,

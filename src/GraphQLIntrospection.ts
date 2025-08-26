@@ -2,7 +2,7 @@ import { exceptionToString } from "@glideapps/ts-necessities";
 import fetch from "cross-fetch";
 import { introspectionQuery } from "graphql";
 
-import { panic } from "quicktype-core";
+import { panic } from "@lanciermonitoring/quicktype-core";
 
 // https://github.com/apollographql/apollo-codegen/blob/master/src/downloadSchema.ts
 const defaultHeaders: { [name: string]: string } = {

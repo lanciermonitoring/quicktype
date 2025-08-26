@@ -1,5 +1,5 @@
 {
-    "name": "quicktype-core",
+    "name": "@lanciermonitoring/quicktype-core",
     "version": "24.0.0",
     "description": "The quicktype engine as a library",
     "license": "Apache-2.0",
